@@ -161,9 +161,9 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
   );
 
   return (
-    <div className="flex flex-col h-[600px] w-full border rounded-md overflow-hidden bg-background">
+    <div className="flex flex-col h-[70vh] md:h-[600px] w-full border rounded-md overflow-hidden bg-background">
       {/* Toolbar */}
-      <div className="flex items-center justify-between p-4 border-b bg-muted/20">
+      <div className="flex items-center justify-between p-4 border-b bg-muted/20 flex-none">
         <h2 className="text-lg font-semibold">Exam Structure Builder</h2>
         <Button onClick={handleSave} className="gap-2">
           <Save size={16} /> Save Structure
@@ -174,15 +174,16 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
       <div className="flex flex-1 overflow-hidden">
         
         {/* Column 1: Subjects */}
-        <div className={cn("flex-1 border-r flex flex-col min-w-[200px]", mobileView !== 'subjects' ? "hidden md:flex" : "flex")}>
-          <div className="p-3 border-b flex justify-between items-center bg-muted/10">
+        <div className={cn("flex-1 border-r flex flex-col min-w-[200px] min-h-0", mobileView !== 'subjects' ? "hidden md:flex" : "flex")}>
+          <div className="p-3 border-b flex justify-between items-center bg-muted/10 flex-none">
             <span className="font-medium text-sm text-muted-foreground">Subjects</span>
             <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setIsAddingSubject(true)}>
               <Plus size={14} />
             </Button>
           </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-1">
+          {/* UPDATED: Added h-full and w-full */}
+          <ScrollArea className="flex-1 h-full w-full">
+            <div className="p-2 space-y-1 pb-10">
               {structure.subjects.map((subject, idx) => (
                 <div 
                   key={idx}
@@ -236,8 +237,8 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
         </div>
 
         {/* Column 2: Classes */}
-        <div className={cn("flex-1 border-r flex flex-col min-w-[200px] bg-background/50", mobileView !== 'classes' ? "hidden md:flex" : "flex")}>
-          <div className="p-3 border-b flex justify-between items-center bg-muted/10">
+        <div className={cn("flex-1 border-r flex flex-col min-w-[200px] bg-background/50 min-h-0", mobileView !== 'classes' ? "hidden md:flex" : "flex")}>
+          <div className="p-3 border-b flex justify-between items-center bg-muted/10 flex-none">
             <div className="flex items-center gap-2">
               <Button 
                 variant="ghost" 
@@ -259,8 +260,9 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
               <Plus size={14} />
             </Button>
           </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-1">
+          {/* UPDATED: Added h-full and w-full */}
+          <ScrollArea className="flex-1 h-full w-full">
+            <div className="p-2 space-y-1 pb-10">
               {selectedSubjectIndex !== null ? (
                 structure.subjects[selectedSubjectIndex].classes.map((cls, idx) => (
                   <div 
@@ -319,8 +321,8 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
         </div>
 
         {/* Column 3: Chapters */}
-        <div className={cn("flex-1 flex flex-col min-w-[200px] bg-background/50", mobileView !== 'chapters' ? "hidden md:flex" : "flex")}>
-          <div className="p-3 border-b flex justify-between items-center bg-muted/10">
+        <div className={cn("flex-1 flex flex-col min-w-[200px] bg-background/50 min-h-0", mobileView !== 'chapters' ? "hidden md:flex" : "flex")}>
+          <div className="p-3 border-b flex justify-between items-center bg-muted/10 flex-none">
             <div className="flex items-center gap-2">
               <Button 
                 variant="ghost" 
@@ -342,8 +344,9 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
               <Plus size={14} />
             </Button>
           </div>
-          <ScrollArea className="flex-1">
-            <div className="p-2 space-y-1">
+          {/* UPDATED: Added h-full and w-full */}
+          <ScrollArea className="flex-1 h-full w-full">
+            <div className="p-2 space-y-1 pb-10">
               {selectedSubjectIndex !== null && selectedClassIndex !== null ? (
                 structure.subjects[selectedSubjectIndex].classes[selectedClassIndex].chapters.map((chapter, idx) => (
                   <div 

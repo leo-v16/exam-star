@@ -152,7 +152,7 @@ export default function AdminPage() {
 
   // 3. Authorized Admin Dashboard
   return (
-    <div className="container mx-auto py-10 space-y-8">
+    <div className="container mx-auto py-10 px-4 md:px-0 space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
@@ -196,24 +196,14 @@ export default function AdminPage() {
                   <p className="text-sm font-medium text-muted-foreground">Available Slugs:</p>
                   <div className="flex flex-wrap gap-2">
                     {availableSlugs.map((slug) => (
-                      <div key={slug} className="group relative">
-                        <Badge 
-                          variant={loadedExamId === slug ? "default" : "secondary"}
-                          className="cursor-pointer hover:bg-primary/80 transition-colors pr-7"
-                          onClick={() => handleLoad(slug)}
-                        >
-                          {slug}
-                        </Badge>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(slug);
-                          }}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+                      <Badge 
+                        key={slug} 
+                        variant={loadedExamId === slug ? "default" : "secondary"}
+                        className="cursor-pointer hover:bg-primary/80 transition-colors"
+                        onClick={() => handleLoad(slug)}
+                      >
+                        {slug}
+                      </Badge>
                     ))}
                   </div>
                 </div>
