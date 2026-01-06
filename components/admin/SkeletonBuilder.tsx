@@ -164,7 +164,7 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     <div className="flex flex-col h-[70vh] md:h-[600px] w-full border rounded-md overflow-hidden bg-background">
       {/* Toolbar */}
       <div className="flex items-center justify-between p-4 border-b bg-muted/20 flex-none">
-        <h2 className="text-lg font-semibold">Exam Structure Builder</h2>
+        <h2 className="text-base md:text-xl font-semibold">Exam Structure Builder</h2>
         <Button onClick={handleSave} className="gap-2">
           <Save size={16} /> Save Structure
         </Button>
