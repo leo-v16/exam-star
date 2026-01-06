@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Search, GraduationCap, ChevronRight, BookOpen } from "lucide-react";
+import { Search, ChevronRight, BookOpen } from "lucide-react";
 import { getAllExams, Exam } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
+import { ModeToggle } from "@/components/ModeToggle";
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
@@ -43,13 +45,23 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Header with Mode Toggle */}
+      <div className="absolute top-4 right-4 z-10">
+        <ModeToggle />
+      </div>
+
       {/* Hero Section */}
       <section className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-6 bg-muted/20 border-b">
-        <div className="flex flex-col items-center gap-2">
-          <div className="bg-primary/10 p-3 rounded-full">
-            <GraduationCap className="h-10 w-10 text-primary" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="bg-primary/5 p-2 rounded-full overflow-hidden flex items-center justify-center shadow-sm">
+            <Image 
+              src="/exam-star-main.png" 
+              alt="ExamEdge Logo" 
+              width={200} 
+              height={200} 
+              className="object-cover"
+            />
           </div>
-          <span className="text-xl font-bold tracking-tight text-primary">ExamEdge</span>
         </div>
         <div className="space-y-2 max-w-lg">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">

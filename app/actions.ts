@@ -27,6 +27,22 @@ export async function getExamStructureAction(examId: string): Promise<{ success:
   }
 }
 
+export async function getExamAction(examId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    if (!examId) throw new Error("Exam ID is required");
+    const docRef = adminDb.collection("exams").doc(examId);
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      return { success: false, error: "Exam not found" };
+    }
+    return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+    console.error("Error fetching exam:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
+}
+
 export async function saveExamStructureAction(examId: string, structure: ExamStructure): Promise<{ success: boolean; error?: string }> {
   try {
     if (!examId) throw new Error("Exam ID is required");
