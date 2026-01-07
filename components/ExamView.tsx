@@ -94,12 +94,12 @@ export default function ExamView({ examId }: ExamViewProps) {
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
       {/* Header */}
-      <div className="px-4 py-3 border-b flex items-center justify-between bg-card">
-         <h1 className="font-bold text-lg capitalize truncate">{examId.replace(/-/g, ' ')}</h1>
+      <div className="px-4 py-3 border-b flex items-center gap-4 bg-card">
+         <h1 className="font-bold text-lg capitalize truncate flex-1 min-w-0">{examId.replace(/-/g, ' ')}</h1>
          <Button 
             variant="ghost" 
             size="icon" 
-            className="h-8 w-8 rounded-full" 
+            className="h-8 w-8 rounded-full flex-shrink-0" 
             onClick={() => router.back()}
           >
             <ArrowLeft className="h-5 w-5" />
@@ -154,12 +154,12 @@ export default function ExamView({ examId }: ExamViewProps) {
                                     <div
                                         key={cIdx}
                                         onClick={() => handleChapterClick(subject.name, cls.name, chapter)}
-                                        className="flex items-center justify-between p-3 rounded-md hover:bg-muted cursor-pointer active:bg-muted/70 transition-colors group"
+                                        className="flex items-center gap-3 p-3 rounded-md hover:bg-muted cursor-pointer active:bg-muted/70 transition-colors group"
                                     >
-                                        <span className="text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors">
+                                        <span className="text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors truncate flex-1 min-w-0">
                                             {chapter}
                                         </span>
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary/50" />
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary/50 flex-shrink-0" />
                                     </div>
                                 ))
                             ) : (

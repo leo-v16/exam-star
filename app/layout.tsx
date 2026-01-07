@@ -14,33 +14,88 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_NAME = "Exam Star";
+const SITE_URL = "https://exam-star.vercel.app";
+
 export const metadata: Metadata = {
-  title: "ExamEdge - Find Your Exam Resources",
-  description: "Access previous year questions and notes for your preparation.",
+  title: {
+    default: "Exam Star – Notes, PYQs & Exam Resources",
+    template: "%s | Exam Star",
+  },
+  description:
+    "Access previous year questions, notes, and exam resources for competitive exams in one place.",
+  applicationName: SITE_NAME,
+  metadataBase: new URL(SITE_URL),
   icons: {
     icon: "/exam-star.png",
+    apple: "/exam-star.png",
+  },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    title: "Exam Star – Find Your Exam Resources",
+    description:
+      "Previous year questions, notes, and exam resources for your preparation.",
+    siteName: SITE_NAME,
+    images: [
+      {
+        url: "/exam-star.png",
+        width: 512,
+        height: 512,
+        alt: "Exam Star Logo",
+      },
+    ],
   },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* ✅ Structured data: Site name + logo */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: SITE_NAME,
+              alternateName: "ExamEdge",
+              url: SITE_URL,
+            }),
+          }}
+        />
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: SITE_NAME,
+              url: SITE_URL,
+              logo: `${SITE_URL}/exam-star.png`,
+            }),
+          }}
+        />
+      </head>
+
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <TimeThemeSetter />
-            {children}
-          </ThemeProvider>
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TimeThemeSetter />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

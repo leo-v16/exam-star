@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, BookOpen, Loader2, Eye } from "lucide-react";
+import { FileText, BookOpen, Loader2, Eye, PenTool } from "lucide-react";
 import { getResources, Resource } from "@/lib/firestore";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -51,6 +50,19 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
 
   const notes = resources.filter((r) => r.type === "note");
   const pyqs = resources.filter((r) => r.type === "pyq");
+  const practice = resources.filter((r) => r.type === "practice");
+
+  // Determine which tabs to show
+  const showNotes = notes.length > 0;
+  const showPyqs = pyqs.length > 0;
+  const showPractice = practice.length > 0;
+
+  // Calculate default tab (priority: notes -> pyqs -> practice)
+  const defaultTab = showNotes ? "notes" : showPyqs ? "pyqs" : showPractice ? "practice" : "";
+  
+  // Calculate grid columns
+  const visibleTabsCount = [showNotes, showPyqs, showPractice].filter(Boolean).length;
+  const gridColsClass = visibleTabsCount === 1 ? "grid-cols-1" : visibleTabsCount === 2 ? "grid-cols-2" : "grid-cols-3";
 
   const openViewer = (resource: Resource) => {
     setSelectedResource(resource);
@@ -65,84 +77,107 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
     );
   }
 
+  // --- UPDATED RESOURCE ITEM (Flattened Structure) ---
   const ResourceItem = ({ item }: { item: Resource }) => (
-    <Card 
-        className="mb-3 hover:bg-muted/50 transition-colors cursor-pointer active:scale-[0.99] transition-transform"
-        onClick={() => openViewer(item)}
+    <div 
+      className="flex items-center gap-3 p-3 mb-3 rounded-lg border bg-card text-card-foreground shadow-sm hover:bg-muted/50 transition-colors cursor-pointer active:scale-[0.99] w-full"
+      onClick={() => openViewer(item)}
     >
-      <CardContent className="p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="bg-primary/10 p-2 rounded-full flex-shrink-0">
-            {item.type === "note" ? (
-              <BookOpen className="h-5 w-5 text-primary" />
-            ) : (
-              <FileText className="h-5 w-5 text-orange-500" />
-            )}
+      {/* 1. Icon: Fixed width (shrink-0) */}
+      <div className="bg-primary/10 p-2 rounded-full shrink-0 flex items-center justify-center h-9 w-9">
+        {item.type === "note" ? (
+          <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+        ) : item.type === "practice" ? (
+          <PenTool className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
+        ) : (
+          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+        )}
+      </div>
+
+      {/* 2. Text: Grid + min-w-0 ensures truncation works perfectly */}
+      <div className="flex-1 min-w-0 grid gap-0.5">
+        <h4 className="font-medium text-sm leading-tight truncate" title={item.title}>
+          {item.title}
+        </h4>
+        {item.year && (
+          <div className="flex">
+            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
+              {item.year}
+            </span>
           </div>
-          <div className="flex flex-col min-w-0">
-            <h4 className="font-medium text-sm truncate">{item.title}</h4>
-            {item.year && (
-              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit mt-0.5">
-                {item.year}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="text-muted-foreground">
-            <Eye className="h-4 w-4" />
-        </div>
-      </CardContent>
-    </Card>
+        )}
+      </div>
+
+      {/* 3. Action Icon: Fixed width (shrink-0) */}
+      <div className="text-muted-foreground shrink-0">
+        <Eye className="h-4 w-4" />
+      </div>
+    </div>
   );
 
   return (
     <>
-        <div className="h-full flex flex-col">
-            <div className="mb-4">
+        <div className="h-full flex flex-col w-full max-w-full overflow-hidden">
+            <div className="mb-4 shrink-0">
                 <h3 className="text-lg font-semibold truncate">{chapter}</h3>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground truncate">
                     {subject} • {classLevel}
                 </p>
             </div>
 
-            <Tabs defaultValue="notes" className="w-full flex-1 flex flex-col">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="notes">Notes ({notes.length})</TabsTrigger>
-                <TabsTrigger value="pyqs">PYQs ({pyqs.length})</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="notes" className="flex-1 min-h-0">
-                    <ScrollArea className="h-[50vh] pr-4">
-                        {notes.length > 0 ? (
-                            notes.map((note) => <ResourceItem key={note.id} item={note} />)
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
-                                <BookOpen className="h-8 w-8 mb-2 opacity-20" />
-                                No notes available.
-                            </div>
-                        )}
-                    </ScrollArea>
-                </TabsContent>
-                
-                <TabsContent value="pyqs" className="flex-1 min-h-0">
-                    <ScrollArea className="h-[50vh] pr-4">
-                        {pyqs.length > 0 ? (
-                            pyqs.map((pyq) => <ResourceItem key={pyq.id} item={pyq} />)
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm">
-                                <FileText className="h-8 w-8 mb-2 opacity-20" />
-                                No PYQs available.
-                            </div>
-                        )}
-                    </ScrollArea>
-                </TabsContent>
-            </Tabs>
+            {visibleTabsCount > 0 ? (
+                <Tabs defaultValue={defaultTab} className="w-full flex-1 flex flex-col min-h-0">
+                    <TabsList className={`grid w-full ${gridColsClass} mb-4 shrink-0`}>
+                      {showNotes && <TabsTrigger value="notes">Notes ({notes.length})</TabsTrigger>}
+                      {showPyqs && <TabsTrigger value="pyqs">PYQs ({pyqs.length})</TabsTrigger>}
+                      {showPractice && <TabsTrigger value="practice">Practice ({practice.length})</TabsTrigger>}
+                    </TabsList>
+                    
+                    {/* Notes Tab Content */}
+                    {showNotes && (
+                        <TabsContent value="notes" className="flex-1 min-h-0 w-full mt-0">
+                            <ScrollArea className="h-full w-full">
+                                <div className="flex flex-col p-1 pr-3 w-full">
+                                    {notes.map((note) => <ResourceItem key={note.id} item={note} />)}
+                                </div>
+                            </ScrollArea>
+                        </TabsContent>
+                    )}
+                    
+                    {/* PYQs Tab Content */}
+                    {showPyqs && (
+                        <TabsContent value="pyqs" className="flex-1 min-h-0 w-full mt-0">
+                            <ScrollArea className="h-full w-full">
+                                <div className="flex flex-col p-1 pr-3 w-full">
+                                    {pyqs.map((pyq) => <ResourceItem key={pyq.id} item={pyq} />)}
+                                </div>
+                            </ScrollArea>
+                        </TabsContent>
+                    )}
+
+                    {/* Practice Tab Content */}
+                    {showPractice && (
+                        <TabsContent value="practice" className="flex-1 min-h-0 w-full mt-0">
+                            <ScrollArea className="h-full w-full">
+                                <div className="flex flex-col p-1 pr-3 w-full">
+                                    {practice.map((prac) => <ResourceItem key={prac.id} item={prac} />)}
+                                </div>
+                            </ScrollArea>
+                        </TabsContent>
+                    )}
+                </Tabs>
+            ) : (
+                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm flex-1">
+                    <BookOpen className="h-10 w-10 mb-2 opacity-20" />
+                    <p>No resources available for this chapter yet.</p>
+                </div>
+            )}
         </div>
 
         {/* PDF Viewer Dialog */}
         <Dialog open={isViewerOpen} onOpenChange={setIsViewerOpen}>
-            <DialogContent className="max-w-4xl h-[90vh] p-0 flex flex-col bg-background">
-                <DialogHeader className="px-4 py-2 border-b">
+            <DialogContent className="max-w-4xl h-[90vh] p-0 flex flex-col bg-background w-[95vw] sm:w-full">
+                <DialogHeader className="px-4 py-2 border-b shrink-0">
                     <DialogTitle className="truncate pr-8 text-base">
                         {selectedResource?.title}
                     </DialogTitle>
@@ -157,13 +192,8 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
                             loading="lazy"
                         />
                     )}
-                    {/* Transparent overlay to discourage right-clicks, but allow scrolling/interaction if possible via pointer-events logic.
-                        However, for an iframe, pointer-events: none disables interaction entirely.
-                        Since we want them to SCROLL the PDF, we cannot block pointer events on the iframe.
-                        We can just rely on the sandbox and 'preview' mode for now. 
-                    */}
                 </div>
-                <div className="p-2 border-t flex justify-end">
+                <div className="p-2 border-t flex justify-end shrink-0">
                     <Button variant="outline" size="sm" onClick={() => setIsViewerOpen(false)}>
                         Close Viewer
                     </Button>

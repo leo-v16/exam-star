@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import SkeletonBuilder from "@/components/admin/SkeletonBuilder";
 import ResourceUploader from "@/components/admin/ResourceUploader";
+import SuggestionsList from "@/components/admin/SuggestionsList";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -166,9 +167,10 @@ export default function AdminPage() {
       </div>
 
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2 mb-8">
-          <TabsTrigger value="structure">1. Structure Builder</TabsTrigger>
-          <TabsTrigger value="upload">2. Resource Uploader</TabsTrigger>
+        <TabsList className="grid w-full max-w-md grid-cols-3 mb-8">
+          <TabsTrigger value="structure">Structure</TabsTrigger>
+          <TabsTrigger value="upload">Upload</TabsTrigger>
+          <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="structure" className="space-y-6">
@@ -236,6 +238,10 @@ export default function AdminPage() {
 
         <TabsContent value="upload">
           <ResourceUploader />
+        </TabsContent>
+
+        <TabsContent value="suggestions">
+          <SuggestionsList />
         </TabsContent>
       </Tabs>
     </div>

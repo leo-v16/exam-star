@@ -44,7 +44,7 @@ export interface Resource {
   subject: string;
   class: string;
   chapter: string;
-  type: 'note' | 'pyq';
+  type: 'note' | 'pyq' | 'practice';
   year?: string;
   title: string;
   fileUrl: string;
@@ -107,7 +107,7 @@ export const getResources = async (
   subject: string, 
   classLevel: string, 
   chapter: string,
-  type?: 'note' | 'pyq'
+  type?: 'note' | 'pyq' | 'practice'
 ): Promise<Resource[]> => {
   const resourcesRef = collection(db, "resources");
   const constraints = [

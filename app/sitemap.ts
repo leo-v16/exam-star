@@ -1,28 +1,30 @@
 import { MetadataRoute } from 'next';
 import { getAllExamIdsAction } from '@/app/actions';
 
+export const dynamic = 'force-dynamic';
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL || 'https://exam-star.vercel.app';
+    process.env.NEXT_PUBLIC_BASE_URL ?? 'https://exam-star.vercel.app';
 
-  const now = new Date();
+  const lastModified = new Date().toISOString();
 
-  // Public static routes only
+  // ✅ Static public pages
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
-      lastModified: now,
+      lastModified,
       changeFrequency: 'daily',
       priority: 1,
     },
   ];
 
-  // Dynamic exam routes
+  // ✅ Dynamic exam pages
   const examResult = await getAllExamIdsAction();
-  const examRoutes: MetadataRoute.Sitemap = (examResult.data || []).map(
-    (examId) => ({
-      url: `${baseUrl}/exam/${examId}`,
-      lastModified: now,
+  const examRoutes: MetadataRoute.Sitemap = (examResult.data ?? []).map(
+    (examId: string) => ({
+      url: `${baseUrl}/exam/${encodeURIComponent(examId)}`,
+      lastModified,
       changeFrequency: 'weekly',
       priority: 0.8,
     })

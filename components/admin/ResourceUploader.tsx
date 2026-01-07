@@ -29,7 +29,7 @@ export default function ResourceUploader() {
   const [selectedChapter, setSelectedChapter] = useState("");
 
   // Form States
-  const [resourceType, setResourceType] = useState<"note" | "pyq">("note");
+  const [resourceType, setResourceType] = useState<"note" | "pyq" | "practice">("note");
   const [year, setYear] = useState("");
   const [title, setTitle] = useState("");
   const [driveLink, setDriveLink] = useState("");
@@ -268,7 +268,7 @@ export default function ResourceUploader() {
               <RadioGroup 
                 defaultValue="note" 
                 value={resourceType} 
-                onValueChange={(val: "note" | "pyq") => setResourceType(val)}
+                onValueChange={(val: "note" | "pyq" | "practice") => setResourceType(val)}
                 className="flex gap-4"
               >
                 <div className="flex items-center space-x-2">
@@ -278,6 +278,10 @@ export default function ResourceUploader() {
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="pyq" id="r-pyq" />
                   <Label htmlFor="r-pyq">PYQ (Past Year Question)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="practice" id="r-practice" />
+                  <Label htmlFor="r-practice">Practice Question</Label>
                 </div>
               </RadioGroup>
             </div>
@@ -334,7 +338,7 @@ export default function ResourceUploader() {
             <div className="pt-6 mt-6 border-t border-dashed space-y-4 w-full max-w-full">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Existing {resourceType === 'note' ? 'Notes' : 'PYQs'}
+                  Existing {resourceType === 'note' ? 'Notes' : resourceType === 'pyq' ? 'PYQs' : 'Practice Questions'}
                 </h3>
                 <Badge variant="outline" className="text-muted-foreground font-normal">
                   {existingResources.length}
@@ -395,7 +399,7 @@ export default function ResourceUploader() {
                 </ScrollArea>
               ) : (
                 <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">
-                  No {resourceType === 'note' ? 'notes' : 'PYQs'} found for this chapter.
+                  No {resourceType === 'note' ? 'notes' : resourceType === 'pyq' ? 'PYQs' : 'practice questions'} found for this chapter.
                 </div>
               )}
             </div>

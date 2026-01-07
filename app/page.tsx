@@ -9,6 +9,7 @@ import { Search, ChevronRight, BookOpen } from "lucide-react";
 import { getAllExams, Exam } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
 import { ModeToggle } from "@/components/ModeToggle";
+import FeedbackFab from "@/components/FeedbackFab";
 
 const ENABLE_GLOW_ANIMATION = true;
 
@@ -67,7 +68,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-6 bg-muted/20 border-b">
         <div className="flex flex-col items-center gap-4">
-          <div className="bg-primary/5 p-4 rounded-md overflow-hidden flex items-center justify-center shadow-sm">
+          <div className="overflow-hidden flex items-center justify-center">
             <Image 
               src="/exam-star-main.png" 
               alt="ExamEdge Logo" 
@@ -165,6 +166,7 @@ export default function HomePage() {
           </div>
         )}
       </main>
+      <FeedbackFab />
     </div>
   );
 }

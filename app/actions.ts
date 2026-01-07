@@ -84,3 +84,56 @@ export async function deleteExamAction(examId: string): Promise<{ success: boole
     return { success: false, error: errorMessage };
   }
 }
+
+// --- Suggestions / Feedback Actions ---
+
+export interface Suggestion {
+  id: string;
+  content: string;
+  createdAt: string; // ISO string for easier serialization
+}
+
+export async function submitSuggestionAction(content: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!content.trim()) throw new Error("Suggestion content cannot be empty");
+    if (content.length > 500) throw new Error("Suggestion content cannot exceed 500 characters");
+    
+    await adminDb.collection("suggestions").add({
+      content,
+      createdAt: new Date().toISOString(), // Use ISO string for simplicity
+    });
+
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Error submitting suggestion:", error);
+    return { success: false, error: "Failed to submit suggestion" };
+  }
+}
+
+export async function getSuggestionsAction(): Promise<{ success: boolean; data?: Suggestion[]; error?: string }> {
+  try {
+    const snapshot = await adminDb.collection("suggestions").orderBy("createdAt", "desc").get();
+    
+    const suggestions = snapshot.docs.map(doc => ({
+      id: doc.id,
+      content: doc.data().content,
+      createdAt: doc.data().createdAt,
+    })) as Suggestion[];
+
+    return { success: true, data: suggestions };
+  } catch (error: unknown) {
+    console.error("Error fetching suggestions:", error);
+    return { success: false, error: "Failed to fetch suggestions" };
+  }
+}
+
+export async function deleteSuggestionAction(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!id) throw new Error("ID is required");
+    await adminDb.collection("suggestions").doc(id).delete();
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Error deleting suggestion:", error);
+    return { success: false, error: "Failed to delete suggestion" };
+  }
+}
