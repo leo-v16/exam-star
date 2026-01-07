@@ -11,7 +11,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea"; // Assuming we don't have a specific Textarea component yet, I'll use standard or check if available.
 import { MessageSquarePlus, Loader2, Send } from "lucide-react";
 import { submitSuggestionAction } from "@/app/actions";
 
