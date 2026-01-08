@@ -47,6 +47,7 @@
   
   /* 1. REGISTER ANIMATION HERE FOR TAILWIND V4 */
   --animate-gradient-x: gradient-x 3s ease infinite;
+  --animate-border-trace: border-trace-fade 2.5s linear forwards;
 }
 
 :root {
@@ -139,5 +140,17 @@
     background-position: 0% 50%;
   }
 }
-/* Note: I removed the .animate-gradient-x class that was here because 
-   we are now using the official Tailwind utility --animate-gradient-x */
+
+@keyframes border-trace-fade {
+  0% {
+    background-position: 0% 50%;
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    background-position: 200% 50%;
+    opacity: 0;
+  }
+}

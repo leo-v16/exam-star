@@ -1,7 +1,18 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getAllExams, Exam, addResource, getResources, deleteResource, Resource } from "@/lib/firestore";
+import {
+  getAllExams,
+  Exam,
+  addResource,
+  getResources,
+  deleteResource,
+  Resource,
+  getResourceTypes,
+  addResourceType,
+  deleteResourceType,
+  updateResourceType
+} from "@/lib/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +25,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink, Plus, Settings2, Pencil, Check, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -29,9 +41,19 @@ export default function ResourceUploader() {
   const [selectedChapter, setSelectedChapter] = useState("");
 
   // Form States
-  const [resourceType, setResourceType] = useState<"note" | "pyq" | "practice">("note");
+  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
+  const [resourceType, setResourceType] = useState<string>("note");
+  const [newTypeName, setNewTypeName] = useState("");
+  const [isAddingType, setIsAddingType] = useState(false);
+  
+  // Type Management States
+  const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
+  const [editingType, setEditingType] = useState<string | null>(null);
+  const [editTypeName, setEditTypeName] = useState("");
+
   const [year, setYear] = useState("");
   const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [driveLink, setDriveLink] = useState("");
 
   // Action States
@@ -51,19 +73,26 @@ export default function ResourceUploader() {
   const selectedClassData = classes.find((c) => c.name === selectedClass);
   const chapters = selectedClassData?.chapters || [];
 
-  // Fetch exams on mount
+  // Fetch exams and types on mount
   useEffect(() => {
-    const fetchExams = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getAllExams();
-        setExams(data);
+        const [examsData, typesData] = await Promise.all([
+          getAllExams(),
+          getResourceTypes()
+        ]);
+        setExams(examsData);
+        setAvailableTypes(typesData);
+        if (typesData.length > 0 && !typesData.includes(resourceType)) {
+            setResourceType(typesData[0]);
+        }
       } catch (error) {
-        console.error("Failed to load exams:", error);
+        console.error("Failed to load initial data:", error);
       } finally {
         setLoadingExams(false);
       }
     };
-    fetchExams();
+    fetchData();
   }, []);
 
   // Fetch existing resources when filters change
@@ -96,8 +125,81 @@ export default function ResourceUploader() {
 
   const resetForm = () => {
     setTitle("");
+    setSubtitle("");
     setYear("");
     setDriveLink("");
+  };
+
+  const handleAddType = async () => {
+    if (!newTypeName.trim()) return;
+    const formatted = newTypeName.trim().toLowerCase().replace(/\s+/g, '-');
+    if (availableTypes.includes(formatted)) {
+        alert("Type already exists");
+        return;
+    }
+    
+    try {
+        await addResourceType(formatted);
+        setAvailableTypes([...availableTypes, formatted]);
+        setResourceType(formatted);
+        setNewTypeName("");
+        setIsAddingType(false);
+    } catch (error) {
+        console.error("Failed to add type:", error);
+        alert("Failed to add type");
+    }
+  };
+
+  const handleDeleteType = async (typeToDelete: string) => {
+    if (!confirm(`Are you sure you want to delete '${typeToDelete}'? \n\nNote: Resources with this type will remain but the type won't be selectable for new uploads.`))
+      return;
+    
+    try {
+        await deleteResourceType(typeToDelete);
+        const newTypes = availableTypes.filter(t => t !== typeToDelete);
+        setAvailableTypes(newTypes);
+        if (resourceType === typeToDelete && newTypes.length > 0) {
+            setResourceType(newTypes[0]);
+        }
+    } catch (error) {
+        console.error("Failed to delete type:", error);
+        alert("Failed to delete type");
+    }
+  };
+
+  const startEditingType = (type: string) => {
+    setEditingType(type);
+    setEditTypeName(type);
+  };
+
+  const saveEditedType = async () => {
+    if (!editingType || !editTypeName.trim()) return;
+    const formatted = editTypeName.trim().toLowerCase().replace(/\s+/g, '-');
+    
+    if (formatted !== editingType && availableTypes.includes(formatted)) {
+        alert("Type name already exists");
+        return;
+    }
+
+    try {
+        await updateResourceType(editingType, formatted);
+        
+        // Update local state
+        const index = availableTypes.indexOf(editingType);
+        const newTypes = [...availableTypes];
+        newTypes[index] = formatted;
+        setAvailableTypes(newTypes);
+        
+        if (resourceType === editingType) {
+            setResourceType(formatted);
+        }
+        
+        setEditingType(null);
+        setEditTypeName("");
+    } catch (error) {
+        console.error("Failed to update type:", error);
+        alert("Failed to update type");
+    }
   };
 
   const handleSave = async () => {
@@ -121,6 +223,7 @@ export default function ResourceUploader() {
         chapter: selectedChapter,
         type: resourceType,
         title: title,
+        subtitle: subtitle,
         fileUrl: finalUrl,
         ...(resourceType === "pyq" && { year }),
       });
@@ -264,25 +367,89 @@ export default function ResourceUploader() {
           {/* 2. Resource Details */}
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Resource Type</Label>
+              <div className="flex items-center justify-between">
+                <Label>Resource Type</Label>
+                <Dialog open={isTypeManagerOpen} onOpenChange={setIsTypeManagerOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground">
+                            <Settings2 className="h-3 w-3 mr-1" />
+                            Manage
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Manage Resource Types</DialogTitle>
+                        </DialogHeader>
+                        
+                        {/* Add New Type Section */}
+                        <div className="flex items-center gap-2 mb-4 p-2 bg-muted/30 rounded-md border">
+                            <Input 
+                                placeholder="Add new type (e.g. syllabus)" 
+                                value={newTypeName} 
+                                onChange={(e) => setNewTypeName(e.target.value)}
+                                className="h-8 text-sm"
+                            />
+                            <Button size="sm" onClick={handleAddType} disabled={!newTypeName} className="h-8 shrink-0">
+                                <Plus className="h-3 w-3 mr-1" /> Add
+                            </Button>
+                        </div>
+
+                        <ScrollArea className="max-h-[300px] pr-4">
+                            <div className="space-y-2">
+                                {availableTypes.map((type) => (
+                                    <div key={type} className="flex items-center justify-between p-2 border rounded-md bg-card">
+                                        {editingType === type ? (
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <Input 
+                                                    value={editTypeName} 
+                                                    onChange={(e) => setEditTypeName(e.target.value)}
+                                                    className="h-8"
+                                                />
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={saveEditedType}>
+                                                    <Check className="h-4 w-4" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => setEditingType(null)}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <span className="capitalize font-medium">{type.replace('-', ' ')}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => startEditingType(type)}>
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button 
+                                                        size="icon" 
+                                                        variant="ghost" 
+                                                        className="h-8 w-8 text-destructive/70 hover:text-destructive" 
+                                                        onClick={() => handleDeleteType(type)}
+                                                        disabled={['note', 'pyq', 'practice'].includes(type)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </DialogContent>
+                </Dialog>
+              </div>
+
               <RadioGroup 
-                defaultValue="note" 
                 value={resourceType} 
-                onValueChange={(val: "note" | "pyq" | "practice") => setResourceType(val)}
-                className="flex gap-4"
+                onValueChange={setResourceType}
+                className="flex gap-3 flex-wrap"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="note" id="r-note" />
-                  <Label htmlFor="r-note">Notes</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="pyq" id="r-pyq" />
-                  <Label htmlFor="r-pyq">PYQ (Past Year Question)</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="practice" id="r-practice" />
-                  <Label htmlFor="r-practice">Practice Question</Label>
-                </div>
+                {availableTypes.map((type) => (
+                    <div key={type} className="flex items-center space-x-2 border rounded-md px-3 py-2 bg-muted/10 has-[[data-state=checked]]:bg-primary/10 has-[[data-state=checked]]:border-primary/50 transition-colors">
+                        <RadioGroupItem value={type} id={`r-${type}`} />
+                        <Label htmlFor={`r-${type}`} className="capitalize cursor-pointer font-medium text-sm">{type.replace('-', ' ')}</Label>
+                    </div>
+                ))}
               </RadioGroup>
             </div>
 
@@ -308,7 +475,16 @@ export default function ResourceUploader() {
             </div>
 
             <div className="space-y-2">
-              <Label>Google Drive Link</Label>
+                <Label>Subtitle <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                <Input 
+                    placeholder="e.g. Brief description or topic list" 
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Google Drive PDF Link</Label>
               <Input 
                   type="text" 
                   placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
@@ -316,7 +492,7 @@ export default function ResourceUploader() {
                   onChange={(e) => setDriveLink(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                  Make sure the file permission in Drive is set to <strong>&quot;Anyone with the link&quot;</strong>.
+                  Paste the &apos;Share&apos; link from Google Drive. We&apos;ll automatically convert it for embedding.
               </p>
             </div>
           </div>
@@ -338,7 +514,7 @@ export default function ResourceUploader() {
             <div className="pt-6 mt-6 border-t border-dashed space-y-4 w-full max-w-full">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Existing {resourceType === 'note' ? 'Notes' : resourceType === 'pyq' ? 'PYQs' : 'Practice Questions'}
+                  Existing {resourceType.replace('-', ' ')}s
                 </h3>
                 <Badge variant="outline" className="text-muted-foreground font-normal">
                   {existingResources.length}
@@ -350,7 +526,7 @@ export default function ResourceUploader() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : existingResources.length > 0 ? (
-                <ScrollArea className="max-h-[350px] w-full rounded-md border p-2 sm:p-4">
+                <div className="max-h-[350px] w-full rounded-md border p-2 sm:p-4 overflow-y-auto [scrollbar-width:thin]">
                    <div className="flex flex-col gap-3">
                     {existingResources.map((res) => (
                       <div 
@@ -367,6 +543,11 @@ export default function ResourceUploader() {
                           <p className="font-medium text-sm sm:text-base leading-tight truncate" title={res.title}>
                             {res.title}
                           </p>
+                          {res.subtitle && (
+                            <p className="text-xs text-muted-foreground truncate" title={res.subtitle}>
+                                {res.subtitle}
+                            </p>
+                          )}
                           {res.year && (
                             <div className="flex">
                               <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wider">
@@ -396,10 +577,10 @@ export default function ResourceUploader() {
                       </div>
                     ))}
                    </div>
-                </ScrollArea>
+                </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">
-                  No {resourceType === 'note' ? 'notes' : resourceType === 'pyq' ? 'PYQs' : 'practice questions'} found for this chapter.
+                  No {resourceType.replace('-', ' ')}s found for this chapter.
                 </div>
               )}
             </div>

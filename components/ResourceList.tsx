@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileText, BookOpen, Loader2, Eye, PenTool } from "lucide-react";
+import { FileText, BookOpen, Loader2, Eye, PenTool, Layout, Video, HelpCircle } from "lucide-react";
 import { getResources, Resource } from "@/lib/firestore";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,15 @@ interface ResourceListProps {
   classLevel: string;
   chapter: string;
 }
+
+// Icon mapping for known types
+const TYPE_ICONS: Record<string, React.ElementType> = {
+  note: BookOpen,
+  pyq: FileText,
+  practice: PenTool,
+  syllabus: Layout,
+  video: Video,
+};
 
 export default function ResourceList({ examId, subject, classLevel, chapter }: ResourceListProps) {
   const [loading, setLoading] = useState(true);
@@ -48,21 +57,22 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
     };
   }, [examId, subject, classLevel, chapter]);
 
-  const notes = resources.filter((r) => r.type === "note");
-  const pyqs = resources.filter((r) => r.type === "pyq");
-  const practice = resources.filter((r) => r.type === "practice");
+  // Group resources by type
+  const resourcesByType = resources.reduce((acc, resource) => {
+    const type = resource.type || "other";
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(resource);
+    return acc;
+  }, {} as Record<string, Resource[]>);
 
-  // Determine which tabs to show
-  const showNotes = notes.length > 0;
-  const showPyqs = pyqs.length > 0;
-  const showPractice = practice.length > 0;
-
-  // Calculate default tab (priority: notes -> pyqs -> practice)
-  const defaultTab = showNotes ? "notes" : showPyqs ? "pyqs" : showPractice ? "practice" : "";
+  const availableTypes = Object.keys(resourcesByType);
   
-  // Calculate grid columns
-  const visibleTabsCount = [showNotes, showPyqs, showPractice].filter(Boolean).length;
-  const gridColsClass = visibleTabsCount === 1 ? "grid-cols-1" : visibleTabsCount === 2 ? "grid-cols-2" : "grid-cols-3";
+  // Default tab logic
+  // Priority: note -> pyq -> practice -> others
+  const defaultTab = availableTypes.includes("note") ? "note" 
+                   : availableTypes.includes("pyq") ? "pyq" 
+                   : availableTypes.includes("practice") ? "practice" 
+                   : availableTypes[0] || "";
 
   const openViewer = (resource: Resource) => {
     setSelectedResource(resource);
@@ -77,43 +87,45 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
     );
   }
 
-  // --- UPDATED RESOURCE ITEM (Flattened Structure) ---
-  const ResourceItem = ({ item }: { item: Resource }) => (
-    <div 
-      className="flex items-center gap-3 p-3 mb-3 rounded-lg border bg-card text-card-foreground shadow-sm hover:bg-muted/50 transition-colors cursor-pointer active:scale-[0.99] w-full"
-      onClick={() => openViewer(item)}
-    >
-      {/* 1. Icon: Fixed width (shrink-0) */}
-      <div className="bg-primary/10 p-2 rounded-full shrink-0 flex items-center justify-center h-9 w-9">
-        {item.type === "note" ? (
-          <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-        ) : item.type === "practice" ? (
-          <PenTool className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />
-        ) : (
-          <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
-        )}
-      </div>
+  const ResourceItem = ({ item }: { item: Resource }) => {
+    const Icon = TYPE_ICONS[item.type] || FileText;
+    
+    return (
+      <div 
+        className="flex items-center gap-3 p-3 mb-3 rounded-lg border bg-card text-card-foreground shadow-sm hover:bg-muted/50 transition-colors cursor-pointer active:scale-[0.99] w-full"
+        onClick={() => openViewer(item)}
+      >
+        {/* 1. Icon */}
+        <div className="bg-primary/10 p-2 rounded-full shrink-0 flex items-center justify-center h-9 w-9">
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+        </div>
 
-      {/* 2. Text: Grid + min-w-0 ensures truncation works perfectly */}
-      <div className="flex-1 min-w-0 grid gap-0.5">
-        <h4 className="font-medium text-sm leading-tight truncate" title={item.title}>
-          {item.title}
-        </h4>
-        {item.year && (
-          <div className="flex">
-            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
-              {item.year}
-            </span>
-          </div>
-        )}
-      </div>
+        {/* 2. Text */}
+        <div className="flex-1 min-w-0 grid gap-0.5">
+          <h4 className="font-medium text-sm leading-tight truncate" title={item.title}>
+            {item.title}
+          </h4>
+          {item.subtitle && (
+             <p className="text-xs text-muted-foreground truncate" title={item.subtitle}>
+               {item.subtitle}
+             </p>
+          )}
+          {item.year && (
+            <div className="flex mt-0.5">
+              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-medium uppercase tracking-wider">
+                {item.year}
+              </span>
+            </div>
+          )}
+        </div>
 
-      {/* 3. Action Icon: Fixed width (shrink-0) */}
-      <div className="text-muted-foreground shrink-0">
-        <Eye className="h-4 w-4" />
+        {/* 3. Action Icon */}
+        <div className="text-muted-foreground shrink-0">
+          <Eye className="h-4 w-4" />
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -125,46 +137,31 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
                 </p>
             </div>
 
-            {visibleTabsCount > 0 ? (
+            {availableTypes.length > 0 ? (
                 <Tabs defaultValue={defaultTab} className="w-full flex-1 flex flex-col min-h-0">
-                    <TabsList className={`grid w-full ${gridColsClass} mb-4 shrink-0`}>
-                      {showNotes && <TabsTrigger value="notes">Notes ({notes.length})</TabsTrigger>}
-                      {showPyqs && <TabsTrigger value="pyqs">PYQs ({pyqs.length})</TabsTrigger>}
-                      {showPractice && <TabsTrigger value="practice">Practice ({practice.length})</TabsTrigger>}
+                    <TabsList className="flex w-full overflow-x-auto justify-start mb-4 shrink-0 [scrollbar-width:none] -mx-1 px-1 gap-2 bg-transparent">
+                      {availableTypes.map((type) => (
+                          <TabsTrigger 
+                            key={type} 
+                            value={type}
+                            className="flex-shrink-0 capitalize data-[state=active]:bg-muted data-[state=active]:shadow-none border border-transparent data-[state=active]:border-border bg-background"
+                          >
+                            {type.replace('-', ' ')} ({resourcesByType[type].length})
+                          </TabsTrigger>
+                      ))}
                     </TabsList>
                     
-                    {/* Notes Tab Content */}
-                    {showNotes && (
-                        <TabsContent value="notes" className="flex-1 min-h-0 w-full mt-0">
+                    {availableTypes.map((type) => (
+                        <TabsContent key={type} value={type} className="flex-1 min-h-0 w-full mt-0">
                             <ScrollArea className="h-full w-full">
                                 <div className="flex flex-col p-1 pr-3 w-full">
-                                    {notes.map((note) => <ResourceItem key={note.id} item={note} />)}
+                                    {resourcesByType[type].map((res) => (
+                                        <ResourceItem key={res.id} item={res} />
+                                    ))}
                                 </div>
                             </ScrollArea>
                         </TabsContent>
-                    )}
-                    
-                    {/* PYQs Tab Content */}
-                    {showPyqs && (
-                        <TabsContent value="pyqs" className="flex-1 min-h-0 w-full mt-0">
-                            <ScrollArea className="h-full w-full">
-                                <div className="flex flex-col p-1 pr-3 w-full">
-                                    {pyqs.map((pyq) => <ResourceItem key={pyq.id} item={pyq} />)}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-                    )}
-
-                    {/* Practice Tab Content */}
-                    {showPractice && (
-                        <TabsContent value="practice" className="flex-1 min-h-0 w-full mt-0">
-                            <ScrollArea className="h-full w-full">
-                                <div className="flex flex-col p-1 pr-3 w-full">
-                                    {practice.map((prac) => <ResourceItem key={prac.id} item={prac} />)}
-                                </div>
-                            </ScrollArea>
-                        </TabsContent>
-                    )}
+                    ))}
                 </Tabs>
             ) : (
                 <div className="flex flex-col items-center justify-center h-40 text-muted-foreground text-sm flex-1">
@@ -187,7 +184,7 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
                         <iframe
                             src={selectedResource.fileUrl}
                             className="w-full h-full border-none"
-                            title="PDF Viewer"
+                            title="Resource Viewer"
                             sandbox="allow-scripts allow-same-origin allow-forms"
                             loading="lazy"
                         />

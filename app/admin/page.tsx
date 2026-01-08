@@ -6,6 +6,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import SkeletonBuilder from "@/components/admin/SkeletonBuilder";
 import ResourceUploader from "@/components/admin/ResourceUploader";
+import EventManager from "@/components/admin/EventManager";
 import SuggestionsList from "@/components/admin/SuggestionsList";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -167,10 +168,11 @@ export default function AdminPage() {
       </div>
 
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3 mb-8">
-          <TabsTrigger value="structure">Structure</TabsTrigger>
-          <TabsTrigger value="upload">Upload</TabsTrigger>
-          <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
+        <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8">
+          <TabsTrigger value="structure" className="text-xs sm:text-sm">Structure</TabsTrigger>
+          <TabsTrigger value="upload" className="text-xs sm:text-sm">Upload</TabsTrigger>
+          <TabsTrigger value="schedule" className="text-xs sm:text-sm">Schedule</TabsTrigger>
+          <TabsTrigger value="suggestions" className="text-xs sm:text-sm">Suggestions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="structure" className="space-y-6">
@@ -238,6 +240,10 @@ export default function AdminPage() {
 
         <TabsContent value="upload">
           <ResourceUploader />
+        </TabsContent>
+
+        <TabsContent value="schedule">
+          <EventManager />
         </TabsContent>
 
         <TabsContent value="suggestions">

@@ -5,32 +5,36 @@ import Link from "next/link";
 import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Search, ChevronRight, BookOpen } from "lucide-react";
-import { getAllExams, Exam } from "@/lib/firestore";
+import { Search, ChevronRight, BookOpen, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { getAllExams, getEvents, Exam, ExamEvent } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
 import { ModeToggle } from "@/components/ModeToggle";
 import FeedbackFab from "@/components/FeedbackFab";
+import { differenceInCalendarDays, isSameDay, isAfter } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 const ENABLE_GLOW_ANIMATION = true;
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
   const [exams, setExams] = useState<Exam[]>([]);
+  const [events, setEvents] = useState<ExamEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchExams = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getAllExams();
-        setExams(data);
+        const [examsData, eventsData] = await Promise.all([getAllExams(), getEvents()]);
+        setExams(examsData);
+        setEvents(eventsData);
       } catch (error) {
-        console.error("Failed to fetch exams:", error);
+        console.error("Failed to fetch data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchExams();
+    fetchData();
   }, []);
 
   const filteredExams = exams.filter((exam) => {
@@ -39,7 +43,41 @@ export default function HomePage() {
     return name.toLowerCase().includes(searchLower);
   });
 
-  // 1. UPDATED: More vibrant gradients to make the glow visible
+  const getExamStatus = (examId: string) => {
+    // Filter events linked to this exam and type 'exam'
+    const examEvents = events.filter(e => e.examId === examId && e.type === 'exam');
+    if (examEvents.length === 0) return null;
+
+    // Find the next upcoming or ongoing event
+    const today = new Date();
+    // Sort by date ascending
+    const sortedEvents = examEvents.sort((a, b) => {
+        const dateA = (a.date as any).toDate ? (a.date as any).toDate() : new Date(a.date);
+        const dateB = (b.date as any).toDate ? (b.date as any).toDate() : new Date(b.date);
+        return dateA.getTime() - dateB.getTime();
+    });
+
+    // Find first event that is today or in future
+    const upcomingEvent = sortedEvents.find(e => {
+        const eventDate = (e.date as any).toDate ? (e.date as any).toDate() : new Date(e.date);
+        // Reset time to start of day for comparison
+        const d = new Date(eventDate); d.setHours(0,0,0,0);
+        const t = new Date(today); t.setHours(0,0,0,0);
+        return d >= t;
+    });
+
+    if (!upcomingEvent) return null;
+
+    const eventDate = (upcomingEvent.date as any).toDate ? (upcomingEvent.date as any).toDate() : new Date(upcomingEvent.date);
+    
+    if (isSameDay(eventDate, today)) {
+        return { label: "Exam Going On", color: "bg-green-500 hover:bg-green-600 text-white" };
+    }
+
+    const daysLeft = differenceInCalendarDays(eventDate, today);
+    return { label: `${daysLeft} Days Left`, color: "bg-blue-500 hover:bg-blue-600 text-white" };
+  };
+
   const gradients = [
     "from-blue-500 via-cyan-400 to-blue-500",
     "from-purple-500 via-pink-400 to-purple-500",
@@ -47,7 +85,6 @@ export default function HomePage() {
     "from-emerald-400 via-green-500 to-emerald-400",
   ];
 
-  // 2. NEW: Helper function to match the shadow color with the strip color
   const getShadowColor = (idx: number) => {
     const colors = [
       "shadow-blue-500/50", 
@@ -93,6 +130,16 @@ export default function HomePage() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+
+        <div className="flex gap-4">
+            <div className="relative p-[2px] rounded-lg overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500 via-orange-500 via-yellow-500 via-green-500 via-blue-500 via-indigo-500 via-violet-500 to-transparent bg-[length:400%_100%] animate-border-trace" />
+                <Link href="/calendar" className="relative flex items-center bg-background hover:bg-accent/50 transition-colors rounded-lg px-4 py-2 text-sm font-medium text-foreground">
+                    <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
+                    View Exam Calendar
+                </Link>
+            </div>
+        </div>
       </section>
 
       {/* Content Grid */}
@@ -108,23 +155,19 @@ export default function HomePage() {
             {filteredExams.map((exam, idx) => {
               const displayName = exam.name || exam.id.replace(/-/g, " ");
               const gradient = gradients[idx % gradients.length];
-              const shadowColor = getShadowColor(idx); // Get the matching shadow
+              const shadowColor = getShadowColor(idx);
+              const status = getExamStatus(exam.id);
               
               return (
                 <Link href={`/exam/${exam.id}`} key={exam.id} className="block group h-full">
-                  {/* Added 'relative' to Card so elements position correctly inside */}
                   <Card className="h-full overflow-hidden border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group-hover:border-primary/50 relative">
                     
-                    {/* 3. UPDATED: The Animated Glow Strip */}
                     <div 
                       className={cn(
                         "h-2 w-full bg-gradient-to-r", 
-                        // Increase background size to allow movement
                         "bg-[length:200%_auto]", 
                         gradient,
-                        // Add the shadow glow
                         `shadow-[0_0_15px_-3px] ${shadowColor}`,
-                        // Apply the animation
                         ENABLE_GLOW_ANIMATION && "animate-gradient-x"
                       )} 
                     />
@@ -134,6 +177,24 @@ export default function HomePage() {
                         <div className="bg-muted p-2 rounded-md group-hover:bg-primary/10 transition-colors">
                           <BookOpen className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
                         </div>
+                        {status && (
+                            <Badge className={cn("text-[10px] px-2 py-0.5 shadow-sm font-semibold animate-in fade-in zoom-in duration-300", status.color)}>
+                                {status.label === "Exam Going On" ? (
+                                    <span className="flex items-center gap-1">
+                                        <span className="relative flex h-2 w-2">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                        </span>
+                                        Going On
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1">
+                                        <Clock className="h-3 w-3" />
+                                        {status.label}
+                                    </span>
+                                )}
+                            </Badge>
+                        )}
                       </div>
                       <CardTitle className="mt-4 text-xl capitalize line-clamp-1">
                         {displayName}
@@ -141,7 +202,7 @@ export default function HomePage() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground line-clamp-2">
-                        Comprehensive resources including notes and PYQs.
+                        Comprehensive resources including notes, mindmaps, PYQs and many more.
                       </p>
                     </CardContent>
                     <CardFooter className="pt-0 flex items-center text-sm font-medium text-primary opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0">

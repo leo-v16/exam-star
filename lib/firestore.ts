@@ -8,7 +8,8 @@ import {
   query, 
   where, 
   getDocs,
-  deleteDoc
+  deleteDoc,
+  writeBatch
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -44,11 +45,22 @@ export interface Resource {
   subject: string;
   class: string;
   chapter: string;
-  type: 'note' | 'pyq' | 'practice';
+  type: string;
   year?: string;
   title: string;
+  subtitle?: string;
   fileUrl: string;
   createdAt?: Date;
+}
+
+export interface ExamEvent {
+  id?: string;
+  title: string;
+  date: Date; // stored as Timestamp in Firestore
+  description?: string;
+  type: 'exam' | 'registration' | 'result' | 'other';
+  examId?: string; // Optional link to an exam
+  link?: string;
 }
 
 // --- Exam Structure Helpers ---
@@ -89,6 +101,73 @@ export const getAllExams = async (): Promise<Exam[]> => {
 
 // --- Resource Helpers ---
 
+export const getResourceTypes = async (): Promise<string[]> => {
+  const ref = doc(db, "settings", "resource-types");
+  const snap = await getDoc(ref);
+  
+  if (snap.exists()) {
+    return snap.data().types as string[];
+  } else {
+    // Initialize with defaults if not exists
+    const defaults = ["note", "pyq", "practice"];
+    await setDoc(ref, { types: defaults });
+    return defaults;
+  }
+};
+
+export const addResourceType = async (newType: string) => {
+  const ref = doc(db, "settings", "resource-types");
+  const snap = await getDoc(ref);
+  let types = ["note", "pyq", "practice"];
+  
+  if (snap.exists()) {
+    types = snap.data().types;
+  }
+  
+  if (!types.includes(newType)) {
+    types.push(newType);
+    await setDoc(ref, { types });
+  }
+};
+
+export const deleteResourceType = async (typeToDelete: string) => {
+  const ref = doc(db, "settings", "resource-types");
+  const snap = await getDoc(ref);
+  
+  if (snap.exists()) {
+    const types = snap.data().types as string[];
+    const updatedTypes = types.filter(t => t !== typeToDelete);
+    await setDoc(ref, { types: updatedTypes });
+  }
+};
+
+export const updateResourceType = async (oldName: string, newName: string) => {
+  // 1. Update the list in settings
+  const settingsRef = doc(db, "settings", "resource-types");
+  const snap = await getDoc(settingsRef);
+  
+  if (snap.exists()) {
+    const types = snap.data().types as string[];
+    const index = types.indexOf(oldName);
+    if (index !== -1) {
+      types[index] = newName;
+      await setDoc(settingsRef, { types });
+    }
+  }
+
+  // 2. Update all resources that have this type
+  const resourcesRef = collection(db, "resources");
+  const q = query(resourcesRef, where("type", "==", oldName));
+  const querySnapshot = await getDocs(q);
+  
+  const batch = writeBatch(db);
+  querySnapshot.forEach((doc) => {
+    batch.update(doc.ref, { type: newName });
+  });
+  
+  await batch.commit();
+};
+
 export const addResource = async (resource: Omit<Resource, 'id'>) => {
   const resourcesRef = collection(db, "resources");
   await addDoc(resourcesRef, {
@@ -107,7 +186,7 @@ export const getResources = async (
   subject: string, 
   classLevel: string, 
   chapter: string,
-  type?: 'note' | 'pyq' | 'practice'
+  type?: string
 ): Promise<Resource[]> => {
   const resourcesRef = collection(db, "resources");
   const constraints = [
@@ -131,4 +210,35 @@ export const uploadFile = async (file: File, path: string): Promise<string> => {
   const storageRef = ref(storage, path);
   const snapshot = await uploadBytes(storageRef, file);
   return await getDownloadURL(snapshot.ref);
+};
+
+// --- Event Helpers ---
+
+export const addEvent = async (event: Omit<ExamEvent, 'id'>) => {
+  const eventsRef = collection(db, "events");
+  await addDoc(eventsRef, {
+    ...event,
+    // Ensure date is stored as a Timestamp or Date object
+    date: event.date 
+  });
+};
+
+export const deleteEvent = async (eventId: string) => {
+  const eventRef = doc(db, "events", eventId);
+  await deleteDoc(eventRef);
+};
+
+export const getEvents = async (): Promise<ExamEvent[]> => {
+  const eventsRef = collection(db, "events");
+  // Simple query: get all. Client can filter/sort.
+  const snap = await getDocs(eventsRef);
+  return snap.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      // Convert Firestore Timestamp to JS Date
+      date: data.date?.toDate ? data.date.toDate() : new Date(data.date)
+    } as ExamEvent;
+  }).sort((a, b) => a.date.getTime() - b.date.getTime()); // Sort by date ascending
 };
