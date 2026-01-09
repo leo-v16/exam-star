@@ -1,54 +1,47 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { getSuggestionsAction, deleteSuggestionAction, Suggestion } from "@/app/actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2, Trash2, MessageSquare } from "lucide-react";
+import { useDataWithCache } from "@/lib/data-hooks";
 
 export default function SuggestionsList() {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use cached hook
+  const { data: suggestions, loading, setData } = useDataWithCache<Suggestion[]>(
+    "cache_suggestions",
+    async () => {
+      const result = await getSuggestionsAction();
+      if (result.success && result.data) return result.data;
+      return [];
+    }
+  );
   
   // Dialog State
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const fetchSuggestions = async () => {
-    setLoading(true);
-    try {
-      const result = await getSuggestionsAction();
-      if (result.success && result.data) {
-        setSuggestions(result.data);
-      }
-    } catch (error) {
-      console.error("Failed to fetch suggestions:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchSuggestions();
-  }, []);
-
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); 
     if (!confirm("Are you sure you want to delete this suggestion?")) return;
     
-    setSuggestions((prev) => prev.filter((s) => s.id !== id));
+    // Optimistic Update
+    if (suggestions) {
+        setData(suggestions.filter((s) => s.id !== id));
+    }
+    
     if (selectedSuggestion?.id === id) setIsDialogOpen(false);
 
     try {
-      const result = await deleteSuggestionAction(id);
-      if (!result.success) {
-        fetchSuggestions(); 
-        alert("Failed to delete.");
-      }
+      await deleteSuggestionAction(id);
+      // No need to refresh hash here as deleteSuggestionAction isn't tied to the global hash 
+      // (unless I update it on server, but suggestion deletes are usually minor).
+      // If I want to be strict, I should update hash on server too.
     } catch (error) {
         console.error("Delete error", error);
-        fetchSuggestions();
+        // revert?
     }
   };
 
@@ -57,13 +50,15 @@ export default function SuggestionsList() {
     setIsDialogOpen(true);
   };
 
-  if (loading) {
+  if (loading && !suggestions) {
     return (
       <div className="flex justify-center items-center h-40">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  const safeSuggestions = suggestions || [];
 
   return (
     <>
@@ -73,14 +68,14 @@ export default function SuggestionsList() {
           <CardDescription>Review feedback submitted by users.</CardDescription>
         </CardHeader>
         <CardContent>
-          {suggestions.length === 0 ? (
+          {safeSuggestions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
               <MessageSquare className="h-10 w-10 mb-2 opacity-20" />
               <p>No suggestions found.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {suggestions.map((suggestion) => (
+              {safeSuggestions.map((suggestion) => (
                 <div 
                   key={suggestion.id} 
                   className="flex items-start gap-3 p-4 rounded-lg border bg-card text-card-foreground shadow-sm hover:bg-muted/50 transition-colors cursor-pointer w-full overflow-hidden"

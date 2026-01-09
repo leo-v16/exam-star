@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format, isSameDay } from "date-fns";
+import { format, isSameDay, startOfDay } from "date-fns";
 import { Calendar as CalendarIcon, Loader2, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getEvents, getAllExams, ExamEvent, Exam } from "@/lib/firestore";
+import { useDataWithCache } from "@/lib/data-hooks";
 
 // Shared gradients from Home Page for consistency
 const GRADIENTS = [
@@ -22,27 +23,51 @@ const GRADIENTS = [
     "from-emerald-400 via-green-500 to-emerald-400",
 ];
 
+// Colors for the Legend (UI)
+const LEGEND_COLORS = [
+    "bg-blue-500",
+    "bg-purple-500",
+    "bg-orange-400",
+    "bg-emerald-400",
+];
+
+// Explicit Tailwind classes for JIT detection - Exam Bars (Bottom)
+const EXAM_BAR_COLORS = [
+    "before:bg-blue-500",
+    "before:bg-purple-500",
+    "before:bg-orange-400",
+    "before:bg-emerald-400",
+];
+
 export default function CalendarPage() {
-    const [events, setEvents] = useState<ExamEvent[]>([]);
-    const [exams, setExams] = useState<Exam[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: cachedEvents, loading: loadingEvents } = useDataWithCache<ExamEvent[]>(
+        "cache_events",
+        async () => {
+            const data = await getEvents();
+            // Ensure dates are Date objects (getEvents does this, but good to be safe)
+            return data.map(e => ({ ...e, date: new Date(e.date) }));
+        },
+        [],
+        (data: any[]) => data.map(e => ({ ...e, date: new Date(e.date) }))
+    );
+
+    const { data: cachedExams, loading: loadingExams } = useDataWithCache<Exam[]>(
+        "cache_exams",
+        async () => {
+            const data = await getAllExams();
+            return data.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+        },
+        [],
+        (data: any[]) => data // No special hydration needed for exams, but we could sort again if needed.
+                              // Actually fetcher sorts, so stored data is sorted.
+    );
+
+    const events = cachedEvents || [];
+    const exams = cachedExams || [];
+    const loading = loadingEvents || loadingExams;
+
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [selectedExamFilter, setSelectedExamFilter] = useState<string>("all");
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [eventsData, examsData] = await Promise.all([getEvents(), getAllExams()]);
-                setEvents(eventsData);
-                setExams(examsData);
-            } catch (error) {
-                console.error("Failed to fetch data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
 
     // Helper to safely get Date object from event (Firestore Timestamp support)
     const getSafeDate = (eventDate: any): Date => {
@@ -62,17 +87,57 @@ export default function CalendarPage() {
         return matchesDate && matchesExam;
     });
 
-    // Get dates that have events for indicators (filtered by exam only, not date)
+    // Modifiers Logic
+    const modifiers: Record<string, Date[]> = {};
+    const modifiersClassNames: Record<string, string> = {};
+
+    // 1. Setup Exam Modifiers (Bottom Bar)
+    exams.forEach((exam, index) => {
+        const barColorClass = EXAM_BAR_COLORS[index % EXAM_BAR_COLORS.length];
+        const key = `exam_${index}`;
+        modifiers[key] = [];
+        // Use 'before' for the Bottom Bar
+        modifiersClassNames[key] = `before:content-[''] before:absolute before:bottom-1 before:left-1.5 before:right-1.5 before:h-[3px] before:rounded-full ${barColorClass} before:z-10`; 
+    });
+
+    // 2. Setup Type Modifiers (Top-Right Dot)
+    const fallbackTypes = ['exam', 'registration', 'result', 'other'];
+    const typeDotColors: Record<string, string> = {
+        exam: "after:bg-destructive",
+        registration: "after:bg-blue-500",
+        result: "after:bg-green-500",
+        other: "after:bg-muted-foreground"
+    };
+
+    fallbackTypes.forEach(type => {
+        const key = `type_${type}`;
+        modifiers[key] = [];
+        // Use 'after' for the Dot (moved to top-right to avoid overlap)
+        modifiersClassNames[key] = `after:content-[''] after:absolute after:top-1 after:right-1 after:w-1.5 after:h-1.5 after:rounded-full ${typeDotColors[type]} after:z-10`;
+    });
+
+    // 3. Populate Modifiers
     const filteredEventsForIndicators = events.filter(event => 
         selectedExamFilter === "all" || event.examId === selectedExamFilter
     );
 
-    const examDates = filteredEventsForIndicators.filter(e => e.type === 'exam').map(e => getSafeDate(e.date));
-    const registrationDates = filteredEventsForIndicators.filter(e => e.type === 'registration').map(e => getSafeDate(e.date));
-    const resultDates = filteredEventsForIndicators.filter(e => e.type === 'result').map(e => getSafeDate(e.date));
-    const otherDates = filteredEventsForIndicators.filter(e => !['exam', 'registration', 'result'].includes(e.type)).map(e => getSafeDate(e.date));
+    filteredEventsForIndicators.forEach(event => {
+        const dateObj = startOfDay(getSafeDate(event.date));
+        
+        // A. Add Exam Modifier (Underline) if linked
+        if (event.examId) {
+            const examIndex = exams.findIndex(e => e.id === event.examId);
+            if (examIndex !== -1) {
+                modifiers[`exam_${examIndex}`].push(dateObj);
+            }
+        }
 
-    // Get exam color logic
+        // B. Add Type Modifier (Dot) - ALWAYS
+        const typeKey = `type_${event.type}` in modifiers ? `type_${event.type}` : `type_other`;
+        modifiers[typeKey].push(dateObj);
+    });
+
+    // Get exam color logic (helper for other parts)
     const getExamColor = (examId?: string) => {
         if (!examId) return null;
         const index = exams.findIndex(e => e.id === examId);
@@ -84,6 +149,7 @@ export default function CalendarPage() {
         if (!examId) return null;
         return exams.find(e => e.id === examId)?.name || examId;
     };
+
 
     // Refactored Event List Logic to prevent UI overlaps
     const renderEventContent = () => {
@@ -156,29 +222,31 @@ export default function CalendarPage() {
                                     selected={date}
                                     onSelect={setDate}
                                     className="rounded-md border-none w-full flex justify-center p-4"
-                                    modifiers={{
-                                        exam: examDates,
-                                        registration: registrationDates,
-                                        result: resultDates,
-                                        other: otherDates
-                                    }}
-                                    modifiersClassNames={{
-                                        exam: "after:content-[''] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-destructive after:rounded-full",
-                                        registration: "after:content-[''] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-blue-500 after:rounded-full",
-                                        result: "after:content-[''] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-green-500 after:rounded-full",
-                                        other: "after:content-[''] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-muted-foreground after:rounded-full"
-                                    }}
+                                    modifiers={modifiers}
+                                    modifiersClassNames={modifiersClassNames}
                                 />
-                                <div className="px-4 pb-4 pt-2 flex flex-wrap gap-2 justify-center">
-                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                        <div className="w-2 h-2 rounded-full bg-destructive" /> Exam
+                                <div className="px-4 pb-4 pt-2 flex flex-col gap-2">
+                                    {/* Type Indicators */}
+                                    <div className="flex flex-wrap gap-3 justify-center">
+                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-destructive" /> Exam
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Reg
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" /> Result
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                        <div className="w-2 h-2 rounded-full bg-blue-500" /> Reg
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                                        <div className="w-2 h-2 rounded-full bg-green-500" /> Result
-                                    </div>
+                                    
+                                    {/* Exam Indicator */}
+                                    {exams.length > 0 && (
+                                        <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground border-t pt-2 mt-1">
+                                            <div className="w-full text-center italic">
+                                                Linked exams have unique colored bars
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>

@@ -7,6 +7,7 @@ import { FileText, BookOpen, Loader2, Eye, PenTool, Layout, Video, HelpCircle } 
 import { getResources, Resource } from "@/lib/firestore";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { fetchWithCache } from "@/lib/data-fetching";
 
 interface ResourceListProps {
   examId: string;
@@ -37,7 +38,16 @@ export default function ResourceList({ examId, subject, classLevel, chapter }: R
     const fetchResources = async () => {
       setLoading(true);
       try {
-        const data = await getResources(examId, subject, classLevel, chapter);
+        const cacheKey = `cache_resources_${examId}_${subject}_${classLevel}_${chapter}`;
+        const data = await fetchWithCache(
+          cacheKey, 
+          () => getResources(examId, subject, classLevel, chapter),
+          (items: any[]) => items.map(item => ({
+             ...item,
+             createdAt: item.createdAt ? new Date(item.createdAt) : undefined
+          }))
+        );
+        
         if (isMounted) {
           setResources(data);
         }

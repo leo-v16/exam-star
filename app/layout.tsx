@@ -64,7 +64,7 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": "WebSite",
               name: SITE_NAME,
-              alternateName: "ExamEdge",
+              alternateName: "ExamStar",
               url: SITE_URL,
             }),
           }}

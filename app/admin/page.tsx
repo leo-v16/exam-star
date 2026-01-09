@@ -16,6 +16,8 @@ import { ExamStructure } from "@/lib/firestore";
 import { getExamStructureAction, saveExamStructureAction, getAllExamIdsAction, deleteExamAction } from "@/app/actions";
 import { Loader2, LogOut, ShieldAlert, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useDataWithCache } from "@/lib/data-hooks";
+import { fetchWithCache } from "@/lib/data-fetching";
 
 const AUTHORIZED_EMAIL = process.env.NEXT_PUBLIC_FIREBASE_ALLOWED_EMAIL;
 
@@ -29,7 +31,19 @@ export default function AdminPage() {
   const [structure, setStructure] = useState<ExamStructure | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedExamId, setLoadedExamId] = useState<string | null>(null);
-  const [availableSlugs, setAvailableSlugs] = useState<string[]>([]);
+
+  const { data: availableSlugsData, refresh: refreshAvailableSlugs } = useDataWithCache<string[]>(
+    "cache_available_slugs",
+    async () => {
+      const result = await getAllExamIdsAction();
+      return result.success && result.data ? result.data : [];
+    },
+    [],
+    undefined,
+    !!user
+  );
+  
+  const availableSlugs = availableSlugsData || [];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -37,20 +51,13 @@ export default function AdminPage() {
         router.push("/login");
       } else {
         setUser(currentUser);
-        fetchAvailableSlugs();
+        // hook handles fetch via enabled flag
       }
       setAuthLoading(false);
     });
 
     return () => unsubscribe();
   }, [router]);
-
-  const fetchAvailableSlugs = async () => {
-    const result = await getAllExamIdsAction();
-    if (result.success && result.data) {
-      setAvailableSlugs(result.data);
-    }
-  };
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -62,15 +69,20 @@ export default function AdminPage() {
     if (!targetId.trim()) return;
     setLoading(true);
     try {
-      const result = await getExamStructureAction(targetId);
-      if (result.success && result.data) {
-        setStructure(result.data);
-        setLoadedExamId(targetId);
-        setExamId(targetId);
-        fetchAvailableSlugs();
-      } else {
-        throw new Error(result.error || "Unknown error");
-      }
+      // Use cache for structure
+      const data = await fetchWithCache<ExamStructure>(
+        `cache_structure_${targetId}`,
+        async () => {
+            const result = await getExamStructureAction(targetId);
+            if (result.success && result.data) return result.data;
+            throw new Error(result.error || "Unknown error");
+        }
+      );
+
+      setStructure(data);
+      setLoadedExamId(targetId);
+      setExamId(targetId);
+      refreshAvailableSlugs();
     } catch (error) {
       console.error("Error loading exam structure:", error);
       alert("Failed to load structure.");
@@ -87,7 +99,8 @@ export default function AdminPage() {
       if (result.success) {
         alert("Structure saved successfully!");
         setStructure(newStructure);
-        fetchAvailableSlugs();
+        refreshAvailableSlugs();
+        // We should also update the cache for this structure manually or just let next fetch handle it (since hash updated)
       } else {
         throw new Error(result.error || "Unknown error");
       }
@@ -114,7 +127,7 @@ export default function AdminPage() {
           setLoadedExamId(null);
           setExamId("");
         }
-        fetchAvailableSlugs();
+        refreshAvailableSlugs();
       } else {
         throw new Error(result.error || "Unknown error");
       }

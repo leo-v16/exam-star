@@ -11,8 +11,27 @@ import {
   getResourceTypes,
   addResourceType,
   deleteResourceType,
-  updateResourceType
+  updateResourceType,
+  updateResourceOrder
 } from "@/lib/firestore";
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,13 +45,95 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink, Plus, Settings2, Pencil, Check, X } from "lucide-react";
+import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink, Plus, Settings2, Pencil, Check, X, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useDataWithCache } from "@/lib/data-hooks";
+
+// --- Sortable Item Component ---
+function SortableResourceItem({ resource, onDelete }: { resource: Resource; onDelete: (id: string) => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: resource.id! });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.8 : 1,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors group relative select-none"
+    >
+      {/* Drag Handle */}
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="cursor-grab hover:text-primary active:cursor-grabbing text-muted-foreground/50 -ml-1 touch-none"
+      >
+        <GripVertical className="h-5 w-5" />
+      </div>
+
+      {/* Icon */}
+      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+        <FileText className="h-4 w-5 text-primary" />
+      </div>
+
+      {/* Text */}
+      <div className="flex-1 min-w-0 grid gap-0.5">
+        <p className="font-medium text-sm sm:text-base leading-tight truncate" title={resource.title}>
+          {resource.title}
+        </p>
+        {resource.subtitle && (
+          <p className="text-xs text-muted-foreground truncate" title={resource.subtitle}>
+              {resource.subtitle}
+          </p>
+        )}
+        {resource.year && (
+          <div className="flex">
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wider">
+              Year: {resource.year}
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 shrink-0">
+        <Button variant="ghost" size="icon" asChild title="View Resource" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <a href={resource.fileUrl} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => resource.id && onDelete(resource.id)}
+          className="h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+          title="Delete Resource"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function ResourceUploader() {
-  const [exams, setExams] = useState<Exam[]>([]);
-  const [loadingExams, setLoadingExams] = useState(true);
+  const { data: examsData, loading: loadingExams } = useDataWithCache("cache_all_exams", getAllExams);
+  const exams = examsData || [];
+
+  const { data: typesData, setData: setTypesData } = useDataWithCache("cache_resource_types", getResourceTypes);
+  const availableTypes = typesData || [];
 
   // Selection States
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -41,7 +142,6 @@ export default function ResourceUploader() {
   const [selectedChapter, setSelectedChapter] = useState("");
 
   // Form States
-  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
   const [resourceType, setResourceType] = useState<string>("note");
   const [newTypeName, setNewTypeName] = useState("");
   const [isAddingType, setIsAddingType] = useState(false);
@@ -59,9 +159,24 @@ export default function ResourceUploader() {
   // Action States
   const [isSaving, setIsSaving] = useState(false);
   
-  // Existing Resources State
-  const [existingResources, setExistingResources] = useState<Resource[]>([]);
-  const [loadingResources, setLoadingResources] = useState(false);
+  // Existing Resources Cache
+  const canFetchResources = !!(selectedExamId && selectedSubject && selectedClass && selectedChapter);
+  const cacheKey = `cache_uploader_resources_${selectedExamId}_${selectedSubject}_${selectedClass}_${selectedChapter}_${resourceType}`;
+  
+  const { 
+    data: existingResourcesData, 
+    loading: loadingResources, 
+    setData: setExistingResources,
+    refresh: refreshResources
+  } = useDataWithCache<Resource[]>(
+    cacheKey,
+    () => getResources(selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType),
+    [selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType], // Deps
+    (data: any[]) => data.map(item => ({ ...item, createdAt: item.createdAt ? new Date(item.createdAt) : undefined })),
+    canFetchResources
+  );
+
+  const existingResources = existingResourcesData || [];
 
   // Derived Data
   const selectedExam = exams.find((e) => e.id === selectedExamId);
@@ -73,55 +188,45 @@ export default function ResourceUploader() {
   const selectedClassData = classes.find((c) => c.name === selectedClass);
   const chapters = selectedClassData?.chapters || [];
 
-  // Fetch exams and types on mount
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(TouchSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setExistingResources((items) => {
+        if (!items) return [];
+        const oldIndex = items.findIndex((i) => i.id === active.id);
+        const newIndex = items.findIndex((i) => i.id === over.id);
+        
+        const newItems = arrayMove(items, oldIndex, newIndex);
+        
+        const updates = newItems.map((item, index) => ({
+          id: item.id!,
+          order: index
+        }));
+
+        updateResourceOrder(updates).catch(err => {
+            console.error("Failed to update order", err);
+        });
+
+        return newItems;
+      });
+    }
+  };
+
+  // Set default type
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [examsData, typesData] = await Promise.all([
-          getAllExams(),
-          getResourceTypes()
-        ]);
-        setExams(examsData);
-        setAvailableTypes(typesData);
-        if (typesData.length > 0 && !typesData.includes(resourceType)) {
-            setResourceType(typesData[0]);
-        }
-      } catch (error) {
-        console.error("Failed to load initial data:", error);
-      } finally {
-        setLoadingExams(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  // Fetch existing resources when filters change
-  useEffect(() => {
-    const fetchResources = async () => {
-      if (!selectedExamId || !selectedSubject || !selectedClass || !selectedChapter) {
-        setExistingResources([]);
-        return;
-      }
-
-      setLoadingResources(true);
-      try {
-        const data = await getResources(
-          selectedExamId,
-          selectedSubject,
-          selectedClass,
-          selectedChapter,
-          resourceType
-        );
-        setExistingResources(data);
-      } catch (error) {
-        console.error("Failed to fetch resources:", error);
-      } finally {
-        setLoadingResources(false);
-      }
-    };
-
-    fetchResources();
-  }, [selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType]);
+    if (availableTypes.length > 0 && !availableTypes.includes(resourceType)) {
+        setResourceType(availableTypes[0]);
+    }
+  }, [availableTypes, resourceType]);
 
   const resetForm = () => {
     setTitle("");
@@ -140,7 +245,8 @@ export default function ResourceUploader() {
     
     try {
         await addResourceType(formatted);
-        setAvailableTypes([...availableTypes, formatted]);
+        // Optimistic update
+        setTypesData([...availableTypes, formatted]);
         setResourceType(formatted);
         setNewTypeName("");
         setIsAddingType(false);
@@ -157,7 +263,7 @@ export default function ResourceUploader() {
     try {
         await deleteResourceType(typeToDelete);
         const newTypes = availableTypes.filter(t => t !== typeToDelete);
-        setAvailableTypes(newTypes);
+        setTypesData(newTypes);
         if (resourceType === typeToDelete && newTypes.length > 0) {
             setResourceType(newTypes[0]);
         }
@@ -188,7 +294,7 @@ export default function ResourceUploader() {
         const index = availableTypes.indexOf(editingType);
         const newTypes = [...availableTypes];
         newTypes[index] = formatted;
-        setAvailableTypes(newTypes);
+        setTypesData(newTypes);
         
         if (resourceType === editingType) {
             setResourceType(formatted);
@@ -230,15 +336,7 @@ export default function ResourceUploader() {
 
       alert("Resource saved successfully!");
       resetForm();
-      
-      const updatedResources = await getResources(
-        selectedExamId,
-        selectedSubject,
-        selectedClass,
-        selectedChapter,
-        resourceType
-      );
-      setExistingResources(updatedResources);
+      refreshResources();
 
     } catch (error) {
       console.error("Save failed:", error);
@@ -253,7 +351,12 @@ export default function ResourceUploader() {
 
     try {
       await deleteResource(resourceId);
-      setExistingResources((prev) => prev.filter((r) => r.id !== resourceId));
+      // Optimistic delete
+      if (existingResourcesData) {
+          setExistingResources(existingResourcesData.filter((r) => r.id !== resourceId));
+      } else {
+          refreshResources();
+      }
     } catch (error) {
       console.error("Failed to delete resource:", error);
       alert("Failed to delete resource.");
@@ -527,56 +630,26 @@ export default function ResourceUploader() {
                 </div>
               ) : existingResources.length > 0 ? (
                 <div className="max-h-[350px] w-full rounded-md border p-2 sm:p-4 overflow-y-auto [scrollbar-width:thin]">
-                   <div className="flex flex-col gap-3">
-                    {existingResources.map((res) => (
-                      <div 
-                        key={res.id} 
-                        className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors group"
-                      >
-                        {/* 1. Icon - Fixed (shrink-0) */}
-                        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                          <FileText className="h-4 w-5 text-primary" />
+                   <DndContext 
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                   >
+                     <SortableContext 
+                        items={existingResources.map(r => r.id!)}
+                        strategy={verticalListSortingStrategy}
+                     >
+                        <div className="flex flex-col gap-3">
+                          {existingResources.map((res) => (
+                            <SortableResourceItem 
+                              key={res.id} 
+                              resource={res} 
+                              onDelete={handleDeleteResource} 
+                            />
+                          ))}
                         </div>
-
-                        {/* 2. Text - Flexible (flex-1 + min-w-0 to force truncate) */}
-                        <div className="flex-1 min-w-0 grid gap-0.5">
-                          <p className="font-medium text-sm sm:text-base leading-tight truncate" title={res.title}>
-                            {res.title}
-                          </p>
-                          {res.subtitle && (
-                            <p className="text-xs text-muted-foreground truncate" title={res.subtitle}>
-                                {res.subtitle}
-                            </p>
-                          )}
-                          {res.year && (
-                            <div className="flex">
-                              <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-semibold uppercase tracking-wider">
-                                Year: {res.year}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 3. Actions - Fixed (shrink-0) */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Button variant="ghost" size="icon" asChild title="View Resource" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                            <a href={res.fileUrl} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => res.id && handleDeleteResource(res.id)}
-                            className="h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                            title="Delete Resource"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                   </div>
+                     </SortableContext>
+                   </DndContext>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg bg-muted/20">

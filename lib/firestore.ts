@@ -9,7 +9,8 @@ import {
   where, 
   getDocs,
   deleteDoc,
-  writeBatch
+  writeBatch,
+  updateDoc
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -51,6 +52,7 @@ export interface Resource {
   subtitle?: string;
   fileUrl: string;
   createdAt?: Date;
+  order?: number;
 }
 
 export interface ExamEvent {
@@ -63,6 +65,22 @@ export interface ExamEvent {
   link?: string;
 }
 
+// --- Global Cache Hash ---
+
+export const updateDataHash = async () => {
+  const ref = doc(db, "settings", "metadata");
+  await setDoc(ref, { hash: Date.now().toString() }, { merge: true });
+};
+
+export const getDataHash = async (): Promise<string | null> => {
+  const ref = doc(db, "settings", "metadata");
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    return snap.data().hash as string;
+  }
+  return null;
+};
+
 // --- Exam Structure Helpers ---
 
 export const saveExamStructure = async (examId: string, structure: ExamStructure) => {
@@ -70,6 +88,7 @@ export const saveExamStructure = async (examId: string, structure: ExamStructure
   // We merge to avoid overwriting other fields like 'name' if they exist, 
   // but for structure updates, we usually want to replace the structure.
   await setDoc(examRef, { structure }, { merge: true });
+  await updateDataHash();
 };
 
 export const getExamStructure = async (examId: string): Promise<ExamStructure | null> => {
@@ -127,6 +146,7 @@ export const addResourceType = async (newType: string) => {
   if (!types.includes(newType)) {
     types.push(newType);
     await setDoc(ref, { types });
+    await updateDataHash();
   }
 };
 
@@ -138,6 +158,7 @@ export const deleteResourceType = async (typeToDelete: string) => {
     const types = snap.data().types as string[];
     const updatedTypes = types.filter(t => t !== typeToDelete);
     await setDoc(ref, { types: updatedTypes });
+    await updateDataHash();
   }
 };
 
@@ -166,19 +187,53 @@ export const updateResourceType = async (oldName: string, newName: string) => {
   });
   
   await batch.commit();
+  await updateDataHash();
 };
 
 export const addResource = async (resource: Omit<Resource, 'id'>) => {
   const resourcesRef = collection(db, "resources");
+  
+  // Fetch existing resources to determine order (prepend/top-most)
+  // We query by the same category constraints
+  const q = query(
+    resourcesRef, 
+    where("examId", "==", resource.examId),
+    where("subject", "==", resource.subject),
+    where("class", "==", resource.class),
+    where("chapter", "==", resource.chapter),
+    where("type", "==", resource.type)
+  );
+  const snap = await getDocs(q);
+  let minOrder = 0;
+  if (!snap.empty) {
+    const orders = snap.docs.map(d => d.data().order as number | undefined).filter(o => o !== undefined) as number[];
+    if (orders.length > 0) {
+      minOrder = Math.min(...orders);
+    }
+  }
+
   await addDoc(resourcesRef, {
     ...resource,
+    order: minOrder - 1,
     createdAt: new Date()
   });
+  await updateDataHash();
+};
+
+export const updateResourceOrder = async (items: { id: string; order: number }[]) => {
+  const batch = writeBatch(db);
+  items.forEach(item => {
+    const ref = doc(db, "resources", item.id);
+    batch.update(ref, { order: item.order });
+  });
+  await batch.commit();
+  await updateDataHash();
 };
 
 export const deleteResource = async (resourceId: string) => {
   const resourceRef = doc(db, "resources", resourceId);
   await deleteDoc(resourceRef);
+  await updateDataHash();
 };
 
 export const getResources = async (
@@ -203,7 +258,19 @@ export const getResources = async (
   const q = query(resourcesRef, ...constraints);
   
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Resource));
+  const resources = snap.docs.map(d => ({ id: d.id, ...d.data() } as Resource));
+  
+  // Sort by order (asc), then by createdAt (desc)
+  return resources.sort((a, b) => {
+    const orderA = a.order ?? 0;
+    const orderB = b.order ?? 0;
+    if (orderA !== orderB) return orderA - orderB;
+    
+    // Fallback to createdAt if orders are equal
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
 };
 
 export const uploadFile = async (file: File, path: string): Promise<string> => {
@@ -221,11 +288,19 @@ export const addEvent = async (event: Omit<ExamEvent, 'id'>) => {
     // Ensure date is stored as a Timestamp or Date object
     date: event.date 
   });
+  await updateDataHash();
 };
 
 export const deleteEvent = async (eventId: string) => {
   const eventRef = doc(db, "events", eventId);
   await deleteDoc(eventRef);
+  await updateDataHash();
+};
+
+export const updateEvent = async (eventId: string, eventData: Partial<ExamEvent>) => {
+  const eventRef = doc(db, "events", eventId);
+  await updateDoc(eventRef, eventData);
+  await updateDataHash();
 };
 
 export const getEvents = async (): Promise<ExamEvent[]> => {

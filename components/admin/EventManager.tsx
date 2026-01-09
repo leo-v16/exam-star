@@ -60,7 +60,6 @@ export default function EventManager() {
     try {
       const [eventsData, examsData] = await Promise.all([getEvents(), getAllExams()]);
       
-      // Sort events by date (newest/upcoming first)
       const sortedEvents = eventsData.sort((a: any, b: any) => {
         const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
         const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
@@ -126,7 +125,7 @@ export default function EventManager() {
   };
 
   return (
-    <div className="grid gap-8 w-full">
+    <div className="w-full max-w-[100vw] px-1 overflow-hidden">
       <Card className="max-w-2xl mx-auto border-dashed shadow-sm w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -191,7 +190,7 @@ export default function EventManager() {
                     value={type}
                     onValueChange={(val: any) => setType(val)}
                   >
-                    <SelectTrigger className="bg-background">
+                    <SelectTrigger className="bg-background w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -204,18 +203,27 @@ export default function EventManager() {
                 </div>
               </div>
 
-              <div className="grid gap-2">
+              <div className="grid gap-2 w-full min-w-0 max-w-full">
                 <Label>Link to Exam (Optional)</Label>
                 <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                    <SelectTrigger className="bg-background">
-                        <SelectValue placeholder="Select an exam to link..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {exams.map((exam) => (
-                            <SelectItem key={exam.id} value={exam.id}>{exam.name || exam.id}</SelectItem>
-                        ))}
-                    </SelectContent>
+                  {/* FIX 1: THE CSS OVERRIDE
+                     We use [&>span]:block to kill the 'flex' layout from select.tsx
+                     We use [&>span]:truncate to enforce dots (...) 
+                  */}
+                  <SelectTrigger className="w-full bg-background [&>span]:block [&>span]:truncate [&>span]:w-full [&>span]:text-left">
+                    <SelectValue placeholder="Select an exam to link..." />
+                  </SelectTrigger>
+                  
+                  <SelectContent className="max-w-[300px]">
+                    <SelectItem value="none">None</SelectItem>
+                    {exams.map((exam) => (
+                      <SelectItem key={exam.id} value={exam.id}>
+                        <span className="truncate block w-[260px]">
+                            {exam.name || exam.id}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
 
@@ -251,7 +259,7 @@ export default function EventManager() {
               <Badge variant="secondary">{events.length} Total</Badge>
             </div>
 
-            <div className="max-h-[400px] overflow-y-auto pr-2 -mr-2">
+            <div className="max-h-[400px] overflow-y-auto pr-1">
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-12 space-y-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -269,10 +277,12 @@ export default function EventManager() {
                     return (
                       <div
                         key={event.id}
-                        className="group flex items-center gap-3 p-2.5 border rounded-lg bg-card hover:border-primary/30 transition-all"
+                        // FIX 2: STRICT GRID COLUMNS
+                        // 50px for Date | 1fr for text (overflow hidden) | Auto for button
+                        className="group grid grid-cols-[50px_1fr_auto] items-center gap-3 p-2.5 border rounded-lg bg-card hover:border-primary/30 transition-all w-full"
                       >
-                        {/* Compact Date Box */}
-                        <div className="flex flex-col items-center justify-center min-w-[45px] h-11 bg-muted/30 rounded-md border">
+                        {/* 1. Date Box */}
+                        <div className="flex flex-col items-center justify-center h-11 bg-muted/30 rounded-md border shrink-0">
                           <span className="text-base font-bold leading-none text-primary">
                             {format(eventDate, "d")}
                           </span>
@@ -281,41 +291,45 @@ export default function EventManager() {
                           </span>
                         </div>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-semibold text-sm truncate">
-                              {event.title}
-                            </h4>
-                            <Badge
-                              variant={
-                                event.type === "exam"
-                                  ? "destructive"
-                                  : event.type === "registration"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] h-4 px-1 shadow-none capitalize"
-                            >
-                              {event.type}
-                            </Badge>
-                          </div>
-                          
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {event.examId && (
-                                <span className="text-[10px] font-medium text-primary bg-primary/5 px-1.5 py-0.5 rounded border border-primary/10 truncate max-w-[120px]">
-                                    {exams.find(e => e.id === event.examId)?.name || event.examId}
-                                </span>
-                            )}
-                            {event.description && (
-                              <span className="text-[11px] text-muted-foreground truncate italic">
-                                {event.description}
-                              </span>
-                            )}
-                          </div>
+                        {/* 2. Content Middle Section - STRICT OVERFLOW HANDLING */}
+                        <div className="min-w-0 overflow-hidden">
+                            {/* Top Row: Title */}
+                            <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-semibold text-sm truncate w-full block">
+                                    {event.title}
+                                </h4>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                                <Badge
+                                    variant={
+                                        event.type === "exam"
+                                        ? "destructive"
+                                        : event.type === "registration"
+                                        ? "default"
+                                        : "secondary"
+                                    }
+                                    className="text-[9px] h-4 px-1 shadow-none capitalize shrink-0"
+                                >
+                                    {event.type}
+                                </Badge>
+
+                                {event.examId && (
+                                    <div className="bg-primary/5 text-primary px-1.5 py-0.5 rounded border border-primary/10 max-w-[100px] shrink-0">
+                                        <div className="truncate text-[10px] font-medium block">
+                                            {exams.find(e => e.id === event.examId)?.name || event.examId}
+                                        </div>
+                                    </div>
+                                )}
+                                {event.description && (
+                                    <span className="truncate text-xs text-muted-foreground italic block min-w-0 flex-1">
+                                        {event.description}
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Delete Action */}
+                        {/* 3. Delete Action */}
                         <Button
                           variant="ghost"
                           size="icon"

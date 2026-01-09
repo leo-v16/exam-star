@@ -14,18 +14,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const exam = result.data;
     const displayName = exam.name || exam.id.replace(/-/g, " ");
     return {
-      title: `${displayName} Resources - Notes & PYQs | ExamEdge`,
-      description: `Access previous year questions (PYQs) and study notes for ${displayName}. Prepare for your exams with ExamEdge.`,
+      title: `${displayName} Resources - Notes & PYQs | ExamStar`,
+      description: `Access previous year questions (PYQs) and study notes for ${displayName}. Prepare for your exams with ExamStar.`,
       openGraph: {
         title: `${displayName} Preparation Resources`,
-        description: `Get the best notes and PYQs for ${displayName} on ExamEdge.`,
+        description: `Get the best notes and PYQs for ${displayName} on ExamStar.`,
         type: "article",
       },
     };
   }
 
   return {
-    title: "Exam Not Found | ExamEdge",
+    title: "Exam Not Found | ExamStar",
     description: "The requested exam resources could not be found.",
   };
 }

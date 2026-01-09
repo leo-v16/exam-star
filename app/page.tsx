@@ -108,7 +108,7 @@ export default function HomePage() {
           <div className="overflow-hidden flex items-center justify-center">
             <Image 
               src="/exam-star-main.png" 
-              alt="ExamEdge Logo" 
+              alt="ExamStar Logo" 
               width={220} 
               height={220} 
               className="object-cover"
@@ -202,7 +202,7 @@ export default function HomePage() {
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground line-clamp-2">
-                        Comprehensive resources including notes, mindmaps, PYQs and many more.
+                        Comprehensive resources including notes, mindmaps, PYQs and more.
                       </p>
                     </CardContent>
                     <CardFooter className="pt-0 flex items-center text-sm font-medium text-primary opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0">
