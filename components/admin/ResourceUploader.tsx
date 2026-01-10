@@ -48,7 +48,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Loader2, Link as LinkIcon, Save, Trash2, FileText, ExternalLink, Plus, Settings2, Pencil, Check, X, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useDataWithCache } from "@/lib/data-hooks";
 
 // --- Sortable Item Component ---
 function SortableResourceItem({ resource, onDelete }: { resource: Resource; onDelete: (id: string) => void }) {
@@ -129,11 +128,9 @@ function SortableResourceItem({ resource, onDelete }: { resource: Resource; onDe
 }
 
 export default function ResourceUploader() {
-  const { data: examsData, loading: loadingExams } = useDataWithCache("cache_all_exams", getAllExams);
-  const exams = examsData || [];
-
-  const { data: typesData, setData: setTypesData } = useDataWithCache("cache_resource_types", getResourceTypes);
-  const availableTypes = typesData || [];
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
+  const [loadingExams, setLoadingExams] = useState(true);
 
   // Selection States
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -144,7 +141,6 @@ export default function ResourceUploader() {
   // Form States
   const [resourceType, setResourceType] = useState<string>("note");
   const [newTypeName, setNewTypeName] = useState("");
-  const [isAddingType, setIsAddingType] = useState(false);
   
   // Type Management States
   const [isTypeManagerOpen, setIsTypeManagerOpen] = useState(false);
@@ -159,24 +155,42 @@ export default function ResourceUploader() {
   // Action States
   const [isSaving, setIsSaving] = useState(false);
   
-  // Existing Resources Cache
-  const canFetchResources = !!(selectedExamId && selectedSubject && selectedClass && selectedChapter);
-  const cacheKey = `cache_uploader_resources_${selectedExamId}_${selectedSubject}_${selectedClass}_${selectedChapter}_${resourceType}`;
-  
-  const { 
-    data: existingResourcesData, 
-    loading: loadingResources, 
-    setData: setExistingResources,
-    refresh: refreshResources
-  } = useDataWithCache<Resource[]>(
-    cacheKey,
-    () => getResources(selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType),
-    [selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType], // Deps
-    (data: any[]) => data.map(item => ({ ...item, createdAt: item.createdAt ? new Date(item.createdAt) : undefined })),
-    canFetchResources
-  );
+  // Existing Resources
+  const [existingResources, setExistingResources] = useState<Resource[]>([]);
+  const [loadingResources, setLoadingResources] = useState(false);
 
-  const existingResources = existingResourcesData || [];
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      setLoadingExams(true);
+      try {
+        const [examsData, typesData] = await Promise.all([getAllExams(), getResourceTypes()]);
+        setExams(examsData);
+        setAvailableTypes(typesData);
+      } catch (error) {
+        console.error("Failed to fetch initial uploader data:", error);
+      } finally {
+        setLoadingExams(false);
+      }
+    };
+    fetchInitialData();
+  }, []);
+
+  const refreshResources = async () => {
+    if (!selectedExamId || !selectedSubject || !selectedClass || !selectedChapter) return;
+    setLoadingResources(true);
+    try {
+      const data = await getResources(selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType);
+      setExistingResources(data);
+    } catch (error) {
+      console.error("Failed to fetch resources:", error);
+    } finally {
+      setLoadingResources(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshResources();
+  }, [selectedExamId, selectedSubject, selectedClass, selectedChapter, resourceType]);
 
   // Derived Data
   const selectedExam = exams.find((e) => e.id === selectedExamId);
@@ -200,24 +214,23 @@ export default function ResourceUploader() {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setExistingResources((items) => {
-        if (!items) return [];
-        const oldIndex = items.findIndex((i) => i.id === active.id);
-        const newIndex = items.findIndex((i) => i.id === over.id);
+        const oldIndex = existingResources.findIndex((i) => i.id === active.id);
+        const newIndex = existingResources.findIndex((i) => i.id === over.id);
         
-        const newItems = arrayMove(items, oldIndex, newIndex);
+        const newItems = arrayMove(existingResources, oldIndex, newIndex);
+        setExistingResources(newItems);
         
         const updates = newItems.map((item, index) => ({
           id: item.id!,
           order: index
         }));
 
-        updateResourceOrder(updates).catch(err => {
+        try {
+            await updateResourceOrder(updates);
+        } catch (err) {
             console.error("Failed to update order", err);
-        });
-
-        return newItems;
-      });
+            refreshResources();
+        }
     }
   };
 
@@ -245,11 +258,9 @@ export default function ResourceUploader() {
     
     try {
         await addResourceType(formatted);
-        // Optimistic update
-        setTypesData([...availableTypes, formatted]);
+        setAvailableTypes([...availableTypes, formatted]);
         setResourceType(formatted);
         setNewTypeName("");
-        setIsAddingType(false);
     } catch (error) {
         console.error("Failed to add type:", error);
         alert("Failed to add type");
@@ -263,7 +274,7 @@ export default function ResourceUploader() {
     try {
         await deleteResourceType(typeToDelete);
         const newTypes = availableTypes.filter(t => t !== typeToDelete);
-        setTypesData(newTypes);
+        setAvailableTypes(newTypes);
         if (resourceType === typeToDelete && newTypes.length > 0) {
             setResourceType(newTypes[0]);
         }
@@ -294,7 +305,7 @@ export default function ResourceUploader() {
         const index = availableTypes.indexOf(editingType);
         const newTypes = [...availableTypes];
         newTypes[index] = formatted;
-        setTypesData(newTypes);
+        setAvailableTypes(newTypes);
         
         if (resourceType === editingType) {
             setResourceType(formatted);
@@ -351,12 +362,7 @@ export default function ResourceUploader() {
 
     try {
       await deleteResource(resourceId);
-      // Optimistic delete
-      if (existingResourcesData) {
-          setExistingResources(existingResourcesData.filter((r) => r.id !== resourceId));
-      } else {
-          refreshResources();
-      }
+      setExistingResources(existingResources.filter((r) => r.id !== resourceId));
     } catch (error) {
       console.error("Failed to delete resource:", error);
       alert("Failed to delete resource.");

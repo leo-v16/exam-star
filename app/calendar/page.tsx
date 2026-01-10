@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getEvents, getAllExams, ExamEvent, Exam } from "@/lib/firestore";
-import { useDataWithCache } from "@/lib/data-hooks";
 
 // Shared gradients from Home Page for consistency
 const GRADIENTS = [
@@ -40,31 +39,25 @@ const EXAM_BAR_COLORS = [
 ];
 
 export default function CalendarPage() {
-    const { data: cachedEvents, loading: loadingEvents } = useDataWithCache<ExamEvent[]>(
-        "cache_events",
-        async () => {
-            const data = await getEvents();
-            // Ensure dates are Date objects (getEvents does this, but good to be safe)
-            return data.map(e => ({ ...e, date: new Date(e.date) }));
-        },
-        [],
-        (data: any[]) => data.map(e => ({ ...e, date: new Date(e.date) }))
-    );
+    const [events, setEvents] = useState<ExamEvent[]>([]);
+    const [exams, setExams] = useState<Exam[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const { data: cachedExams, loading: loadingExams } = useDataWithCache<Exam[]>(
-        "cache_exams",
-        async () => {
-            const data = await getAllExams();
-            return data.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
-        },
-        [],
-        (data: any[]) => data // No special hydration needed for exams, but we could sort again if needed.
-                              // Actually fetcher sorts, so stored data is sorted.
-    );
-
-    const events = cachedEvents || [];
-    const exams = cachedExams || [];
-    const loading = loadingEvents || loadingExams;
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const [eventsData, examsData] = await Promise.all([getEvents(), getAllExams()]);
+                setEvents(eventsData.map(e => ({ ...e, date: new Date(e.date) })));
+                setExams(examsData.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id)));
+            } catch (error) {
+                console.error("Failed to fetch calendar data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
 
     const [date, setDate] = useState<Date | undefined>(new Date());
     const [selectedExamFilter, setSelectedExamFilter] = useState<string>("all");

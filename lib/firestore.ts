@@ -65,22 +65,6 @@ export interface ExamEvent {
   link?: string;
 }
 
-// --- Global Cache Hash ---
-
-export const updateDataHash = async () => {
-  const ref = doc(db, "settings", "metadata");
-  await setDoc(ref, { hash: Date.now().toString() }, { merge: true });
-};
-
-export const getDataHash = async (): Promise<string | null> => {
-  const ref = doc(db, "settings", "metadata");
-  const snap = await getDoc(ref);
-  if (snap.exists()) {
-    return snap.data().hash as string;
-  }
-  return null;
-};
-
 // --- Exam Structure Helpers ---
 
 export const saveExamStructure = async (examId: string, structure: ExamStructure) => {
@@ -88,7 +72,6 @@ export const saveExamStructure = async (examId: string, structure: ExamStructure
   // We merge to avoid overwriting other fields like 'name' if they exist, 
   // but for structure updates, we usually want to replace the structure.
   await setDoc(examRef, { structure }, { merge: true });
-  await updateDataHash();
 };
 
 export const getExamStructure = async (examId: string): Promise<ExamStructure | null> => {
@@ -146,7 +129,6 @@ export const addResourceType = async (newType: string) => {
   if (!types.includes(newType)) {
     types.push(newType);
     await setDoc(ref, { types });
-    await updateDataHash();
   }
 };
 
@@ -158,7 +140,6 @@ export const deleteResourceType = async (typeToDelete: string) => {
     const types = snap.data().types as string[];
     const updatedTypes = types.filter(t => t !== typeToDelete);
     await setDoc(ref, { types: updatedTypes });
-    await updateDataHash();
   }
 };
 
@@ -187,7 +168,6 @@ export const updateResourceType = async (oldName: string, newName: string) => {
   });
   
   await batch.commit();
-  await updateDataHash();
 };
 
 export const addResource = async (resource: Omit<Resource, 'id'>) => {
@@ -217,7 +197,6 @@ export const addResource = async (resource: Omit<Resource, 'id'>) => {
     order: minOrder - 1,
     createdAt: new Date()
   });
-  await updateDataHash();
 };
 
 export const updateResourceOrder = async (items: { id: string; order: number }[]) => {
@@ -227,13 +206,11 @@ export const updateResourceOrder = async (items: { id: string; order: number }[]
     batch.update(ref, { order: item.order });
   });
   await batch.commit();
-  await updateDataHash();
 };
 
 export const deleteResource = async (resourceId: string) => {
   const resourceRef = doc(db, "resources", resourceId);
   await deleteDoc(resourceRef);
-  await updateDataHash();
 };
 
 export const getResources = async (
@@ -288,19 +265,16 @@ export const addEvent = async (event: Omit<ExamEvent, 'id'>) => {
     // Ensure date is stored as a Timestamp or Date object
     date: event.date 
   });
-  await updateDataHash();
 };
 
 export const deleteEvent = async (eventId: string) => {
   const eventRef = doc(db, "events", eventId);
   await deleteDoc(eventRef);
-  await updateDataHash();
 };
 
 export const updateEvent = async (eventId: string, eventData: Partial<ExamEvent>) => {
   const eventRef = doc(db, "events", eventId);
   await updateDoc(eventRef, eventData);
-  await updateDataHash();
 };
 
 export const getEvents = async (): Promise<ExamEvent[]> => {

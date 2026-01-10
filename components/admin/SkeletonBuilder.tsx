@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Trash, ChevronRight, Save, Pencil, ArrowLeft } from "lucide-react";
+import { Plus, Trash, ChevronRight, Save, Pencil, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
@@ -14,15 +14,17 @@ import {
 } from "@/components/ui/dialog";
 import { ExamStructure, Subject, ClassLevel } from "@/lib/firestore";
 import { cn } from "@/lib/utils";
+import { renameSubjectAction, renameClassAction, renameChapterAction } from "@/app/actions";
 
 interface SkeletonBuilderProps {
   initialStructure?: ExamStructure;
   onSave: (structure: ExamStructure) => void;
+  examId?: string;
 }
 
 const emptyStructure: ExamStructure = { subjects: [] };
 
-export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBuilderProps) {
+export default function SkeletonBuilder({ initialStructure, onSave, examId }: SkeletonBuilderProps) {
   const [structure, setStructure] = useState<ExamStructure>(initialStructure || emptyStructure);
   const [selectedSubjectIndex, setSelectedSubjectIndex] = useState<number | null>(null);
   const [selectedClassIndex, setSelectedClassIndex] = useState<number | null>(null);
@@ -42,6 +44,8 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
   const [editingClassIndex, setEditingClassIndex] = useState<number | null>(null);
   const [editingChapterIndex, setEditingChapterIndex] = useState<number | null>(null);
 
+  const [isRenaming, setIsRenaming] = useState(false);
+
   // -- Handlers --
 
   const handleAddSubject = () => {
@@ -52,8 +56,29 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     setIsAddingSubject(false);
   };
 
-  const handleUpdateSubject = () => {
+  const handleUpdateSubject = async () => {
     if (editingSubjectIndex === null || !editItemName.trim()) return;
+    
+    // Rename Logic
+    if (examId) {
+        setIsRenaming(true);
+        const oldName = structure.subjects[editingSubjectIndex].name;
+        try {
+            const result = await renameSubjectAction(examId, oldName, editItemName);
+            if (!result.success && result.code !== "ITEM_NOT_FOUND") {
+                alert(`Failed to rename subject: ${result.error}`);
+                setIsRenaming(false);
+                return;
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Failed to rename subject");
+            setIsRenaming(false);
+            return;
+        }
+        setIsRenaming(false);
+    }
+
     const newSubjects = [...structure.subjects];
     newSubjects[editingSubjectIndex].name = editItemName;
     setStructure({ ...structure, subjects: newSubjects });
@@ -81,8 +106,30 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     setIsAddingClass(false);
   };
 
-  const handleUpdateClass = () => {
+  const handleUpdateClass = async () => {
     if (selectedSubjectIndex === null || editingClassIndex === null || !editItemName.trim()) return;
+
+    if (examId) {
+        setIsRenaming(true);
+        const subjectName = structure.subjects[selectedSubjectIndex].name;
+        const oldName = structure.subjects[selectedSubjectIndex].classes[editingClassIndex].name;
+        
+        try {
+            const result = await renameClassAction(examId, subjectName, oldName, editItemName);
+            if (!result.success && result.code !== "ITEM_NOT_FOUND") {
+                alert(`Failed to rename class: ${result.error}`);
+                setIsRenaming(false);
+                return;
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Failed to rename class");
+            setIsRenaming(false);
+            return;
+        }
+        setIsRenaming(false);
+    }
+
     const newSubjects = [...structure.subjects];
     newSubjects[selectedSubjectIndex].classes[editingClassIndex].name = editItemName;
     setStructure({ ...structure, subjects: newSubjects });
@@ -109,8 +156,31 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
     setIsAddingChapter(false);
   };
 
-  const handleUpdateChapter = () => {
+  const handleUpdateChapter = async () => {
     if (selectedSubjectIndex === null || selectedClassIndex === null || editingChapterIndex === null || !editItemName.trim()) return;
+    
+    if (examId) {
+        setIsRenaming(true);
+        const subjectName = structure.subjects[selectedSubjectIndex].name;
+        const className = structure.subjects[selectedSubjectIndex].classes[selectedClassIndex].name;
+        const oldName = structure.subjects[selectedSubjectIndex].classes[selectedClassIndex].chapters[editingChapterIndex];
+        
+        try {
+            const result = await renameChapterAction(examId, subjectName, className, oldName, editItemName);
+            if (!result.success && result.code !== "ITEM_NOT_FOUND") {
+                alert(`Failed to rename chapter: ${result.error}`);
+                setIsRenaming(false);
+                return;
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Failed to rename chapter");
+            setIsRenaming(false);
+            return;
+        }
+        setIsRenaming(false);
+    }
+
     const newSubjects = [...structure.subjects];
     newSubjects[selectedSubjectIndex].classes[selectedClassIndex].chapters[editingChapterIndex] = editItemName;
     setStructure({ ...structure, subjects: newSubjects });
@@ -149,12 +219,16 @@ export default function SkeletonBuilder({ initialStructure, onSave }: SkeletonBu
             value={value} 
             onChange={(e) => setValue(e.target.value)} 
             placeholder="Enter name..." 
-            onKeyDown={(e) => { if(e.key === 'Enter') onConfirm(); }}
+            onKeyDown={(e) => { if(e.key === 'Enter' && !isRenaming) onConfirm(); }}
+            disabled={isRenaming}
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={onConfirm}>Save</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isRenaming}>Cancel</Button>
+          <Button onClick={onConfirm} disabled={isRenaming}>
+            {isRenaming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {isRenaming ? "Renaming..." : "Save"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

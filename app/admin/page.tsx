@@ -8,6 +8,7 @@ import SkeletonBuilder from "@/components/admin/SkeletonBuilder";
 import ResourceUploader from "@/components/admin/ResourceUploader";
 import EventManager from "@/components/admin/EventManager";
 import SuggestionsList from "@/components/admin/SuggestionsList";
+import OrphanedResourceManager from "@/components/admin/OrphanedResourceManager";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,8 +17,6 @@ import { ExamStructure } from "@/lib/firestore";
 import { getExamStructureAction, saveExamStructureAction, getAllExamIdsAction, deleteExamAction } from "@/app/actions";
 import { Loader2, LogOut, ShieldAlert, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useDataWithCache } from "@/lib/data-hooks";
-import { fetchWithCache } from "@/lib/data-fetching";
 
 const AUTHORIZED_EMAIL = process.env.NEXT_PUBLIC_FIREBASE_ALLOWED_EMAIL;
 
@@ -31,19 +30,14 @@ export default function AdminPage() {
   const [structure, setStructure] = useState<ExamStructure | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadedExamId, setLoadedExamId] = useState<string | null>(null);
+  const [availableSlugs, setAvailableSlugs] = useState<string[]>([]);
 
-  const { data: availableSlugsData, refresh: refreshAvailableSlugs } = useDataWithCache<string[]>(
-    "cache_available_slugs",
-    async () => {
-      const result = await getAllExamIdsAction();
-      return result.success && result.data ? result.data : [];
-    },
-    [],
-    undefined,
-    !!user
-  );
-  
-  const availableSlugs = availableSlugsData || [];
+  const fetchAvailableSlugs = async () => {
+    const result = await getAllExamIdsAction();
+    if (result.success && result.data) {
+      setAvailableSlugs(result.data);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -51,7 +45,7 @@ export default function AdminPage() {
         router.push("/login");
       } else {
         setUser(currentUser);
-        // hook handles fetch via enabled flag
+        fetchAvailableSlugs();
       }
       setAuthLoading(false);
     });
@@ -69,20 +63,15 @@ export default function AdminPage() {
     if (!targetId.trim()) return;
     setLoading(true);
     try {
-      // Use cache for structure
-      const data = await fetchWithCache<ExamStructure>(
-        `cache_structure_${targetId}`,
-        async () => {
-            const result = await getExamStructureAction(targetId);
-            if (result.success && result.data) return result.data;
-            throw new Error(result.error || "Unknown error");
-        }
-      );
-
-      setStructure(data);
-      setLoadedExamId(targetId);
-      setExamId(targetId);
-      refreshAvailableSlugs();
+      const result = await getExamStructureAction(targetId);
+      if (result.success && result.data) {
+        setStructure(result.data);
+        setLoadedExamId(targetId);
+        setExamId(targetId);
+      } else {
+        throw new Error(result.error || "Unknown error");
+      }
+      fetchAvailableSlugs();
     } catch (error) {
       console.error("Error loading exam structure:", error);
       alert("Failed to load structure.");
@@ -99,8 +88,7 @@ export default function AdminPage() {
       if (result.success) {
         alert("Structure saved successfully!");
         setStructure(newStructure);
-        refreshAvailableSlugs();
-        // We should also update the cache for this structure manually or just let next fetch handle it (since hash updated)
+        fetchAvailableSlugs();
       } else {
         throw new Error(result.error || "Unknown error");
       }
@@ -127,7 +115,7 @@ export default function AdminPage() {
           setLoadedExamId(null);
           setExamId("");
         }
-        refreshAvailableSlugs();
+        fetchAvailableSlugs();
       } else {
         throw new Error(result.error || "Unknown error");
       }
@@ -181,11 +169,12 @@ export default function AdminPage() {
       </div>
 
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-8">
-          <TabsTrigger value="structure" className="text-xs sm:text-sm">Structure</TabsTrigger>
-          <TabsTrigger value="upload" className="text-xs sm:text-sm">Upload</TabsTrigger>
-          <TabsTrigger value="schedule" className="text-xs sm:text-sm">Schedule</TabsTrigger>
-          <TabsTrigger value="suggestions" className="text-xs sm:text-sm">Suggestions</TabsTrigger>
+        <TabsList className="grid w-full max-w-3xl grid-cols-5 mb-8">
+          <TabsTrigger value="structure" className="text-[10px] min-[400px]:text-xs sm:text-sm px-1 sm:px-3">Structure</TabsTrigger>
+          <TabsTrigger value="upload" className="text-[10px] min-[400px]:text-xs sm:text-sm px-1 sm:px-3">Upload</TabsTrigger>
+          <TabsTrigger value="schedule" className="text-[10px] min-[400px]:text-xs sm:text-sm px-1 sm:px-3">Schedule</TabsTrigger>
+          <TabsTrigger value="suggestions" className="text-[10px] min-[400px]:text-xs sm:text-sm px-1 sm:px-3">Suggestions</TabsTrigger>
+          <TabsTrigger value="maintenance" className="text-[10px] min-[400px]:text-xs sm:text-sm px-1 sm:px-3">Maintenance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="structure" className="space-y-6">
@@ -244,6 +233,7 @@ export default function AdminPage() {
               </div>
               <SkeletonBuilder 
                 key={loadedExamId} // Force remount on ID change
+                examId={loadedExamId}
                 initialStructure={structure} 
                 onSave={handleSave} 
               />
@@ -261,6 +251,10 @@ export default function AdminPage() {
 
         <TabsContent value="suggestions">
           <SuggestionsList />
+        </TabsContent>
+
+        <TabsContent value="maintenance">
+          <OrphanedResourceManager examId={loadedExamId || ""} />
         </TabsContent>
       </Tabs>
     </div>

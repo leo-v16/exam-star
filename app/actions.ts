@@ -1,7 +1,7 @@
 "use server";
 
 import { adminDb } from "@/lib/firebase-admin";
-import { ExamStructure } from "@/lib/firestore"; // Sharing the Type definition
+import { ExamStructure, Resource } from "@/lib/firestore"; // Sharing the Type definition
 
 export async function getExamStructureAction(examId: string): Promise<{ success: boolean; data?: ExamStructure; error?: string }> {
   try {
@@ -85,6 +85,155 @@ export async function deleteExamAction(examId: string): Promise<{ success: boole
   }
 }
 
+// --- Rename Actions ---
+
+export async function renameSubjectAction(examId: string, oldName: string, newName: string): Promise<{ success: boolean; code?: string; error?: string }> {
+  try {
+    const examRef = adminDb.collection("exams").doc(examId);
+    const resourcesRef = adminDb.collection("resources");
+
+    // 1. Transaction to update structure
+    await adminDb.runTransaction(async (t) => {
+        const doc = await t.get(examRef);
+        if (!doc.exists) throw new Error("Exam not found");
+        
+        const data = doc.data();
+        const structure = data?.structure as ExamStructure;
+        
+        const subjectIndex = structure.subjects.findIndex(s => s.name === oldName);
+        if (subjectIndex === -1) {
+             throw new Error("ITEM_NOT_FOUND");
+        }
+        
+        structure.subjects[subjectIndex].name = newName;
+        t.update(examRef, { structure });
+    });
+    
+    // 2. Batch Update Resources
+    const snapshot = await resourcesRef
+        .where("examId", "==", examId)
+        .where("subject", "==", oldName)
+        .get();
+        
+    if (!snapshot.empty) {
+        const batch = adminDb.batch();
+        snapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { subject: newName });
+        });
+        await batch.commit();
+    }
+    
+    return { success: true };
+  } catch (error: any) {
+      if (error.message === "ITEM_NOT_FOUND") {
+          return { success: false, code: "ITEM_NOT_FOUND" };
+      }
+      console.error("Error renaming subject:", error);
+      return { success: false, error: error.message };
+  }
+}
+
+export async function renameClassAction(examId: string, subjectName: string, oldName: string, newName: string): Promise<{ success: boolean; code?: string; error?: string }> {
+  try {
+    const examRef = adminDb.collection("exams").doc(examId);
+    const resourcesRef = adminDb.collection("resources");
+
+    // 1. Transaction to update structure
+    await adminDb.runTransaction(async (t) => {
+        const doc = await t.get(examRef);
+        if (!doc.exists) throw new Error("Exam not found");
+        
+        const data = doc.data();
+        const structure = data?.structure as ExamStructure;
+        
+        const subject = structure.subjects.find(s => s.name === subjectName);
+        if (!subject) throw new Error("SUBJECT_NOT_FOUND");
+
+        const classIndex = subject.classes.findIndex(c => c.name === oldName);
+        if (classIndex === -1) throw new Error("ITEM_NOT_FOUND");
+        
+        subject.classes[classIndex].name = newName;
+        t.update(examRef, { structure });
+    });
+    
+    // 2. Batch Update Resources
+    const snapshot = await resourcesRef
+        .where("examId", "==", examId)
+        .where("subject", "==", subjectName)
+        .where("class", "==", oldName)
+        .get();
+        
+    if (!snapshot.empty) {
+        const batch = adminDb.batch();
+        snapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { class: newName });
+        });
+        await batch.commit();
+    }
+    
+    return { success: true };
+  } catch (error: any) {
+      if (error.message === "ITEM_NOT_FOUND" || error.message === "SUBJECT_NOT_FOUND") {
+          return { success: false, code: "ITEM_NOT_FOUND" };
+      }
+      console.error("Error renaming class:", error);
+      return { success: false, error: error.message };
+  }
+}
+
+export async function renameChapterAction(examId: string, subjectName: string, className: string, oldName: string, newName: string): Promise<{ success: boolean; code?: string; error?: string }> {
+  try {
+    const examRef = adminDb.collection("exams").doc(examId);
+    const resourcesRef = adminDb.collection("resources");
+
+    // 1. Transaction to update structure
+    await adminDb.runTransaction(async (t) => {
+        const doc = await t.get(examRef);
+        if (!doc.exists) throw new Error("Exam not found");
+        
+        const data = doc.data();
+        const structure = data?.structure as ExamStructure;
+        
+        const subject = structure.subjects.find(s => s.name === subjectName);
+        if (!subject) throw new Error("SUBJECT_NOT_FOUND");
+
+        const classItem = subject.classes.find(c => c.name === className);
+        if (!classItem) throw new Error("CLASS_NOT_FOUND");
+
+        const chapterIndex = classItem.chapters.indexOf(oldName);
+        if (chapterIndex === -1) throw new Error("ITEM_NOT_FOUND");
+        
+        classItem.chapters[chapterIndex] = newName;
+        t.update(examRef, { structure });
+    });
+    
+    // 2. Batch Update Resources
+    const snapshot = await resourcesRef
+        .where("examId", "==", examId)
+        .where("subject", "==", subjectName)
+        .where("class", "==", className)
+        .where("chapter", "==", oldName)
+        .get();
+        
+    if (!snapshot.empty) {
+        const batch = adminDb.batch();
+        snapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { chapter: newName });
+        });
+        await batch.commit();
+    }
+    
+    return { success: true };
+  } catch (error: any) {
+      if (["ITEM_NOT_FOUND", "SUBJECT_NOT_FOUND", "CLASS_NOT_FOUND"].includes(error.message)) {
+          return { success: false, code: "ITEM_NOT_FOUND" };
+      }
+      console.error("Error renaming chapter:", error);
+      return { success: false, error: error.message };
+  }
+}
+
+
 // --- Suggestions / Feedback Actions ---
 
 export interface Suggestion {
@@ -136,4 +285,62 @@ export async function deleteSuggestionAction(id: string): Promise<{ success: boo
     console.error("Error deleting suggestion:", error);
     return { success: false, error: "Failed to delete suggestion" };
   }
+}
+
+// --- Maintenance / Orphaned Resources Actions ---
+
+export async function getOrphanedResourcesAction(examId: string): Promise<{ success: boolean; data?: Resource[]; error?: string }> {
+    try {
+        if (!examId) throw new Error("Exam ID is required");
+
+        // 1. Get Structure
+        const structureRes = await getExamStructureAction(examId);
+        if (!structureRes.success || !structureRes.data) return { success: false, error: "Exam not found" };
+        const structure = structureRes.data;
+
+        // 2. Get All Resources
+        const snap = await adminDb.collection("resources").where("examId", "==", examId).get();
+        const resources = snap.docs.map(d => {
+             const data = d.data();
+             return {
+                 id: d.id,
+                 ...data,
+                 // Convert timestamps to Date objects for client consistency if needed, 
+                 // but Resource type has Date for createdAt.
+                 // Firestore Admin returns Timestamp.
+                 createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+             } as Resource;
+        });
+
+        // 3. Find Orphans
+        const orphans = resources.filter(r => {
+            const sub = structure.subjects.find(s => s.name === r.subject);
+            if (!sub) return true;
+            const cls = sub.classes.find(c => c.name === r.class);
+            if (!cls) return true;
+            const chap = cls.chapters.includes(r.chapter);
+            if (!chap) return true;
+            return false;
+        });
+
+        return { success: true, data: orphans };
+    } catch (error: any) {
+        console.error("Error fetching orphans:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function moveResourceAction(resourceId: string, targetSubject: string, targetClass: string, targetChapter: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        if (!resourceId) throw new Error("Resource ID is required");
+        await adminDb.collection("resources").doc(resourceId).update({
+            subject: targetSubject,
+            class: targetClass,
+            chapter: targetChapter
+        });
+        return { success: true };
+    } catch (e: any) {
+        console.error("Error moving resource:", e);
+        return { success: false, error: e.message };
+    }
 }
